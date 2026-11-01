@@ -12,7 +12,8 @@ use lighting::effects::{Pulse, Starlight, Visualizer, Wave};
 use lighting::engine::{Effect, Press, Streamer};
 use serde_json::{Value, json};
 
-use crate::config::{DeviceConfig, Lighting, lerp, parse_rgb, period_ms};
+use crate::config::{DeviceConfig, Lighting, layer_rgb, lerp, parse_rgb, period_ms};
+use crate::drivers::Driver;
 use crate::view::{self, DeviceView};
 
 pub type Reply = Sender<Result<Value, String>>;
@@ -54,9 +55,9 @@ struct Animation {
     recent: Vec<Press>,
 }
 
-pub fn spawn(mut found: Found, config: DeviceConfig) -> Handle {
+pub fn spawn(mut found: Found, config: DeviceConfig, driver: Option<Driver>) -> Handle {
     let (tx, rx) = mpsc::channel();
-    let view = Arc::new(Mutex::new(view::build(&mut found)));
+    let view = Arc::new(Mutex::new(view::build(&mut found, driver.as_ref())));
     let alive = Arc::new(AtomicBool::new(true));
     let lights = Arc::new(Mutex::new(LightState {
         mode: "none",
@@ -73,7 +74,7 @@ pub fn spawn(mut found: Found, config: DeviceConfig) -> Handle {
         .name(format!("dev {}", found.id))
         .spawn(move || {
             let id = found.id.clone();
-            if let Err(e) = run(found, rx, view, lights) {
+            if let Err(e) = run(found, rx, view, lights, driver) {
                 eprintln!("{id}: worker stopped: {e}");
             }
             alive.store(false, Ordering::Relaxed);
@@ -87,8 +88,9 @@ fn run(
     rx: Receiver<Cmd>,
     view: Arc<Mutex<DeviceView>>,
     lights: Arc<Mutex<LightState>>,
+    driver: Option<Driver>,
 ) -> Result<(), String> {
-    let kind = view.lock().unwrap().kind;
+    let driver = driver.as_ref();
     let mut anim: Option<Animation> = None;
     let mut last_battery = Instant::now();
 
@@ -97,15 +99,17 @@ fn run(
             .as_ref()
             .map_or(Duration::from_secs(1), |a| a.streamer.frame_interval);
         let tick = Instant::now();
-        match rx.recv_timeout(wait) {
-            Ok(cmd) => {
-                let applied = match &cmd {
-                    Cmd::Apply(cfg) => cfg.lighting.clone(),
-                    _ => None,
-                };
-                handle(&mut found, kind, cmd, &mut anim)?;
-                if let Some(l) = applied {
-                    record_device_lighting(&mut found, &l, anim.is_some(), &lights);
+        match rx.recv_timeout(wait).map(|cmd| coalesce(cmd, &rx)) {
+            Ok(cmds) => {
+                for cmd in cmds {
+                    let applied = match &cmd {
+                        Cmd::Apply(cfg) => cfg.lighting.clone(),
+                        _ => None,
+                    };
+                    handle(&mut found, driver, cmd, &mut anim)?;
+                    if let Some(l) = applied {
+                        record_device_lighting(&mut found, &l, anim.is_some(), &lights);
+                    }
                 }
             }
             Err(RecvTimeoutError::Timeout) => {}
@@ -145,7 +149,7 @@ fn run(
 /// (I/O error) ends the worker.
 fn handle(
     found: &mut Found,
-    kind: &str,
+    driver: Option<&Driver>,
     cmd: Cmd,
     anim: &mut Option<Animation>,
 ) -> Result<(), String> {
@@ -161,7 +165,7 @@ fn handle(
     };
     match cmd {
         Cmd::Apply(cfg) => {
-            if let Err(e) = apply(found, kind, &cfg, anim) {
+            if let Err(e) = apply(found, driver, &cfg, anim) {
                 eprintln!("{}: applying config failed: {e}", found.id);
                 if matches!(e, ApplyError::Device(hidpp::Error::Io(_))) {
                     return Err("device disconnected".into());
@@ -220,7 +224,7 @@ impl From<String> for ApplyError {
 
 fn apply(
     found: &mut Found,
-    kind: &str,
+    driver: Option<&Driver>,
     cfg: &DeviceConfig,
     anim: &mut Option<Animation>,
 ) -> Result<(), ApplyError> {
@@ -232,7 +236,8 @@ fn apply(
             match anim {
                 Some(a) => a.effect = effect,
                 None => {
-                    let positions = if kind == "keyboard" {
+                    let keys = driver.and_then(|d| d.layout.keys.as_deref());
+                    let positions = if keys == Some("iso-tkl") {
                         lighting::layout::iso_tkl_positions()
                     } else {
                         // No geometry known yet: lay zones out in a line.
@@ -243,7 +248,8 @@ fn apply(
                             .collect()
                     };
                     let streamer = Streamer::new(dev, positions)?;
-                    let presses = (kind == "keyboard")
+                    let presses = driver
+                        .is_some_and(|d| d.input.reactive)
                         .then(|| {
                             let short = found.name.split_whitespace().next().unwrap_or(&found.name);
                             let nodes = lighting::input::find_event_nodes(short);
@@ -258,9 +264,17 @@ fn apply(
                     });
                 }
             }
-        } else if let Lighting::Ripple { color } = lighting {
+        } else if let Lighting::Firmware { id, color, glow } = &normalize(lighting) {
             *anim = None;
-            devices::set_firmware_reactive(dev, parse_rgb(color)?)?;
+            let fx = driver
+                .and_then(|d| d.firmware_effects.iter().find(|e| &e.id == id))
+                .ok_or_else(|| format!("no firmware effect '{id}' in this device's driver file"))?;
+            devices::set_cluster_effect(
+                dev,
+                fx.cluster,
+                fx.effect_id,
+                &fx.params_for(layer_rgb(color, *glow)?)?,
+            )?;
         } else {
             *anim = None;
             devices::set_effect(dev, native_effect(lighting)?)?;
@@ -325,16 +339,24 @@ fn host_effect(l: &Lighting) -> Result<Box<dyn Effect>, String> {
             width,
             fade,
             rainbow,
+            glow,
+            backdrop,
         } => {
-            let mut p = Pulse::new(parse_rgb(color)?, parse_rgb(base)?);
+            let mut p = Pulse::new(layer_rgb(color, *glow)?, layer_rgb(base, *backdrop)?);
             p.speed = lerp(*speed, 4.0, 30.0);
             p.width = lerp(*width, 0.6, 4.0);
             p.lifetime = lerp(*fade, 0.4, 3.0);
             p.hue_step = if *rainbow { 0.13 } else { 0.0 };
             Box::new(p)
         }
-        Lighting::Starlight { star, sky, density } => {
-            let mut s = Starlight::new(parse_rgb(star)?, parse_rgb(sky)?);
+        Lighting::Starlight {
+            star,
+            sky,
+            density,
+            glow,
+            backdrop,
+        } => {
+            let mut s = Starlight::new(layer_rgb(star, *glow)?, layer_rgb(sky, *backdrop)?);
             s.density = lerp(*density, 1.0, 40.0);
             Box::new(s)
         }
@@ -342,9 +364,15 @@ fn host_effect(l: &Lighting) -> Result<Box<dyn Effect>, String> {
             low,
             high,
             background,
+            glow,
+            backdrop,
         } => Box::new(
-            Visualizer::new(parse_rgb(low)?, parse_rgb(high)?, parse_rgb(background)?)
-                .map_err(|e| format!("audio capture (pw-record): {e}"))?,
+            Visualizer::new(
+                layer_rgb(low, *glow)?,
+                layer_rgb(high, *glow)?,
+                layer_rgb(background, *backdrop)?,
+            )
+            .map_err(|e| format!("audio capture (pw-record): {e}"))?,
         ),
         _ => unreachable!("device-native effect"),
     })
@@ -368,7 +396,8 @@ fn record_device_lighting(
     let color = match l {
         Lighting::Fixed { color }
         | Lighting::Breathing { color, .. }
-        | Lighting::Ripple { color } => parse_rgb(color).ok(),
+        | Lighting::Ripple { color }
+        | Lighting::Firmware { color, .. } => parse_rgb(color).ok(),
         Lighting::Cycle { .. } => Some([0xff, 0x2a, 0x2a]),
         _ => None,
     };
@@ -378,4 +407,30 @@ fn record_device_lighting(
         let zones = devices::perkey::zones(&mut found.device).unwrap_or_else(|_| vec![1]);
         st.zones = zones.into_iter().map(|z| (z, hex(c))).collect();
     }
+}
+
+/// Old configs stored the G515 ripple as its own effect; it is now firmware effect "ripple".
+fn normalize(l: &Lighting) -> Lighting {
+    match l {
+        Lighting::Ripple { color } => Lighting::Firmware {
+            id: "ripple".into(),
+            color: color.clone(),
+            glow: 100,
+        },
+        other => other.clone(),
+    }
+}
+
+/// A slider drag queues many Apply commands; only the newest one is applied, so a slow
+/// wireless device doesn't replay every intermediate value. Other commands keep their order.
+fn coalesce(first: Cmd, rx: &Receiver<Cmd>) -> Vec<Cmd> {
+    let mut latest_apply = None;
+    let mut others = Vec::new();
+    for cmd in std::iter::once(first).chain(rx.try_iter()) {
+        match cmd {
+            Cmd::Apply(_) => latest_apply = Some(cmd),
+            other => others.push(other),
+        }
+    }
+    latest_apply.into_iter().chain(others).collect()
 }

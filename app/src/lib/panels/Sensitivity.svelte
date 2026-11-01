@@ -67,7 +67,6 @@
 </script>
 
 <div class="panel">
-  <h2>Sensitivity</h2>
 
   <div class="row">
     <span class="label">DPI levels</span>

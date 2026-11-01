@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Device } from "./api";
-  import DeviceVisual from "./DeviceVisual.svelte";
+  import LightingViewer from "./LightingViewer.svelte";
   import Info from "./panels/Info.svelte";
   import Lighting from "./panels/Lighting.svelte";
   import Microphone from "./panels/Microphone.svelte";
@@ -39,23 +39,31 @@
 </script>
 
 <div class="page">
-  <aside>
-    <div class="hero">
-      <DeviceVisual {device} size={150} />
-      <div class="name">{device.name}</div>
-      {#if device.battery}<div class="battery">{device.battery.percent}%{device.battery.charging ? " · charging" : ""}</div>{/if}
-    </div>
-    <nav>
-      {#each sections as s}
-        <button class:active={active === s.key} onclick={() => (active = s.key)}>
-          {s.label}
-          {#if s.planned}<span class="dot" title="in development"></span>{/if}
-        </button>
-      {/each}
-    </nav>
-  </aside>
+  <nav>
+    {#each sections as s}
+      <button class:active={active === s.key} onclick={() => (active = s.key)}>
+        {s.label}
+        {#if s.planned}<span class="dot" title="in development"></span>{/if}
+      </button>
+    {/each}
+  </nav>
 
-  <main>
+  <section class="stage">
+    <div class="title">
+      <h1>{device.name}</h1>
+      <span class="meta">
+        {device.connection}{#if device.battery} · {device.battery.percent}%{device.battery.charging ? " charging" : ""}{/if}
+      </span>
+    </div>
+    <div class="visual">
+      {#key device.id}
+        <LightingViewer {device} live={active === "lighting"} />
+      {/key}
+    </div>
+  </section>
+
+  <aside class="settings">
+    <h2>{current.label}</h2>
     {#key active}
       {#if current.planned}
         <Planned title={current.label} detail={current.planned} />
@@ -69,19 +77,21 @@
         <Info {device} />
       {/if}
     {/key}
-  </main>
+  </aside>
 </div>
 
 <style>
-  .page { display: grid; grid-template-columns: 240px 1fr; height: 100%; }
-  aside { border-right: 1px solid var(--line); background: var(--bg-raised); display: flex; flex-direction: column; }
-  .hero { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 16px 22px; color: var(--accent); border-bottom: 1px solid var(--line); }
-  .name { color: var(--text); font-weight: 600; text-align: center; }
-  .battery { color: var(--text-dim); font-size: 12px; }
-  nav { display: flex; flex-direction: column; padding: 10px; gap: 2px; }
-  nav button { text-align: left; border: none; background: none; border-radius: 8px; padding: 10px 12px; color: var(--text-dim); display: flex; align-items: center; justify-content: space-between; }
+  .page { display: grid; grid-template-columns: 200px minmax(0, 1fr) 400px; height: 100%; }
+  nav { display: flex; flex-direction: column; gap: 2px; padding: 18px 10px; border-right: 1px solid var(--line); }
+  nav button { text-align: left; border: none; background: none; border-radius: 8px; padding: 11px 14px; color: var(--text-dim); display: flex; align-items: center; justify-content: space-between; }
   nav button:hover { background: var(--bg-hover); color: var(--text); }
   nav button.active { background: var(--bg-card); color: var(--text); box-shadow: inset 3px 0 0 var(--accent); }
   .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
-  main { padding: 36px 44px; overflow: auto; }
+  .stage { display: grid; grid-template-rows: auto 1fr; min-width: 0; background: radial-gradient(ellipse at 50% 55%, #1c2230 0%, var(--bg) 70%); }
+  .title { padding: 26px 34px 0; }
+  h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: 0.01em; }
+  .meta { color: var(--text-dim); font-size: 13px; }
+  .visual { min-height: 0; padding: 20px 34px 34px; color: var(--text-dim); }
+  .settings { border-left: 1px solid var(--line); background: var(--bg-raised); padding: 26px 26px 40px; overflow: auto; }
+  .settings h2 { margin: 0 0 20px; font-size: 18px; }
 </style>

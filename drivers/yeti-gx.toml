@@ -1,0 +1,4 @@
+name = "Yeti GX"
+kind = "microphone"
+products = [0x0afc]
+ghub_model = "yeti_gx"

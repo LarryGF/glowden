@@ -85,6 +85,10 @@ pub struct Device {
     /// Index of the dongle's bridge feature; when set, requests go to the device behind it.
     bridge: Option<u8>,
     feature_cache: HashMap<u16, u8>,
+    /// Effect lists per RGB cluster; they never change while the device stays connected.
+    pub(crate) effect_cache: HashMap<u8, Vec<(u8, u16)>>,
+    /// Set once lighting has been switched to host control, so it isn't redone per change.
+    pub(crate) lighting_claimed: bool,
     /// Reply timeout for the current attempt; grows while a sleeping device wakes.
     timeout: Duration,
 }
@@ -115,6 +119,8 @@ impl Device {
             framing,
             bridge: None,
             feature_cache: HashMap::new(),
+            effect_cache: HashMap::new(),
+            lighting_claimed: false,
             timeout: TIMEOUT,
         };
         if let Framing::Centurion { .. } = framing {

@@ -14,7 +14,7 @@
     <div class="grid">
       {#each devices as d (d.id)}
         <button class="card" onclick={() => onopen(d)}>
-          <div class="icon"><DeviceVisual device={d} size={150} /></div>
+          <div class="icon"><DeviceVisual device={d} size={210} /></div>
           <div class="name">{d.name}</div>
           <div class="meta">
             <span class="badge">{d.connection}</span>
@@ -31,23 +31,24 @@
 </section>
 
 <style>
-  .home { padding: 40px 48px; }
-  .empty { color: var(--text-dim); text-align: center; margin-top: 18vh; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 20px; }
+  .home { height: 100%; display: grid; place-items: center; padding: 40px; background: radial-gradient(ellipse at 50% 60%, #1c2230 0%, var(--bg) 70%); }
+  .empty { color: var(--text-dim); text-align: center; }
+  .grid { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end; gap: 28px; max-width: 1400px; }
   .card {
+    width: 260px;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 14px;
-    padding: 34px 20px 24px;
-    background: linear-gradient(180deg, var(--bg-card), var(--bg-raised));
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    transition: border-color 0.15s, transform 0.15s;
+    padding: 24px 16px 22px;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 16px;
+    transition: background 0.15s, border-color 0.15s, transform 0.15s;
   }
-  .card:hover { border-color: var(--accent); transform: translateY(-2px); background: linear-gradient(180deg, var(--bg-hover), var(--bg-raised)); }
-  .icon { color: var(--text-dim); }
+  .card:hover { background: rgba(255, 255, 255, 0.03); border-color: var(--line); transform: translateY(-3px); }
+  .icon { height: 220px; display: grid; place-items: center; color: var(--text-dim); }
   .card:hover .icon { color: var(--accent); }
-  .name { font-size: 16px; font-weight: 600; text-align: center; }
+  .name { font-size: 15px; font-weight: 600; text-align: center; letter-spacing: 0.02em; }
   .meta { display: flex; gap: 6px; }
 </style>

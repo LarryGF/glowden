@@ -5,12 +5,11 @@
 </script>
 
 <div class="panel">
-  <h2>Device info</h2>
   <dl>
     <dt>Model</dt><dd>{device.name}</dd>
     <dt>USB id</dt><dd>{device.product}</dd>
     <dt>Connection</dt><dd>{device.connection}</dd>
-    <dt>Node</dt><dd><code>/dev/{device.id}</code></dd>
+    <dt>Device id</dt><dd><code>{device.id}</code></dd>
     {#if device.battery}<dt>Battery</dt><dd>{device.battery.percent}%{device.battery.charging ? ", charging" : ""}</dd>{/if}
   </dl>
 

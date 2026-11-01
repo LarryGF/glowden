@@ -1,0 +1,4 @@
+name = "G502 X PLUS"
+kind = "mouse"
+products = [0x4099]
+ghub_model = "g502x_plus"

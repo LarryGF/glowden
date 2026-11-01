@@ -22,7 +22,14 @@ pub enum Lighting {
         intensity: u8,
         saturation: u8,
     },
-    /// Keyboard firmware ripple on key press (G515 effect 0x0017).
+    /// Effect stored in the device firmware, defined by the device's driver file.
+    Firmware {
+        id: String,
+        color: String,
+        #[serde(default = "full")]
+        glow: u8,
+    },
+    /// Older configs: the G515 ripple before firmware effects came from driver files.
     Ripple { color: String },
     /// Host-rendered per-key effects: they need the service running.
     Wave { speed: u8 },
@@ -33,16 +40,28 @@ pub enum Lighting {
         width: u8,
         fade: u8,
         rainbow: bool,
+        #[serde(default = "full")]
+        glow: u8,
+        #[serde(default = "full")]
+        backdrop: u8,
     },
     Starlight {
         star: String,
         sky: String,
         density: u8,
+        #[serde(default = "full")]
+        glow: u8,
+        #[serde(default = "full")]
+        backdrop: u8,
     },
     Visualizer {
         low: String,
         high: String,
         background: String,
+        #[serde(default = "full")]
+        glow: u8,
+        #[serde(default = "full")]
+        backdrop: u8,
     },
 }
 
@@ -130,4 +149,14 @@ pub fn lerp(slider: u8, lo: f32, hi: f32) -> f32 {
 /// Speed slider → cycle period in ms (faster = shorter), for device-native effects.
 pub fn period_ms(speed: u8) -> u16 {
     lerp(speed, 20000.0, 1000.0) as u16
+}
+
+fn full() -> u8 {
+    100
+}
+
+/// Color from config, scaled by a 0..=100 layer level.
+pub fn layer_rgb(hex: &str, level: u8) -> Result<[u8; 3], String> {
+    let k = level.min(100) as u32;
+    Ok(parse_rgb(hex)?.map(|c| (c as u32 * k / 100) as u8))
 }

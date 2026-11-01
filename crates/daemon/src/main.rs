@@ -2,6 +2,7 @@
 //! Unix socket with one JSON request/response per line.
 
 mod config;
+mod drivers;
 mod view;
 mod worker;
 
@@ -22,6 +23,7 @@ use worker::{Cmd, Handle};
 
 struct State {
     config: Config,
+    drivers: drivers::Registry,
     workers: HashMap<String, Handle>,
     scanned: bool,
 }
@@ -64,6 +66,7 @@ fn main() {
     let shared: Shared = Arc::new((
         Mutex::new(State {
             config: Config::load(),
+            drivers: drivers::Registry::load(),
             workers: HashMap::new(),
             scanned: false,
         }),
@@ -103,7 +106,8 @@ fn manage(shared: Shared) {
             let cfg = st.config.devices.get(&f.id).cloned().unwrap_or_default();
             eprintln!("{}: {} connected, applying {:?}", f.id, f.name, cfg);
             let id = f.id.clone();
-            st.workers.insert(id, worker::spawn(f, cfg));
+            let driver = st.drivers.for_product(f.device.info.product).cloned();
+            st.workers.insert(id, worker::spawn(f, cfg, driver));
             drop(st);
             shared.1.notify_all();
         });
@@ -233,8 +237,8 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
             let st = lock.lock().unwrap();
             let v = st.workers.get(&id).map(|h| h.view.lock().unwrap().clone());
             Ok(json!(v.and_then(|v| view::layout(
-                v.model?,
-                v.kind == "keyboard"
+                v.model.as_deref()?,
+                v.hid_usage_zones
             ))))
         }
         Request::LightingState { id } => {
@@ -250,8 +254,8 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
             let model = st
                 .workers
                 .get(&id)
-                .and_then(|h| h.view.lock().unwrap().model);
-            Ok(json!(model.and_then(view::image)))
+                .and_then(|h| h.view.lock().unwrap().model.clone());
+            Ok(json!(model.as_deref().and_then(view::image)))
         }
         Request::SetDpi { id, levels, level } => {
             if levels.is_empty() || levels.len() > 5 || level >= levels.len() {

@@ -22,6 +22,7 @@ package() {
   install -Dm755 "$root/target/release/lhub-app" "$pkgdir/usr/bin/lhub-app"
   install -Dm755 "$root/target/release/lhub" "$pkgdir/usr/bin/lhub"
   install -Dm755 "$root/target/release/lhubd" "$pkgdir/usr/bin/lhubd"
+  install -Dm644 -t "$pkgdir/usr/share/lhub/drivers" "$root"/drivers/*.toml
   install -Dm644 "$root/packaging/udev/70-lhub.rules" "$pkgdir/usr/lib/udev/rules.d/70-lhub.rules"
   install -Dm644 "$root/packaging/systemd/lhubd.service" "$pkgdir/usr/lib/systemd/user/lhubd.service"
 }

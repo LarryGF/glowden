@@ -28,19 +28,25 @@ fn has_feature(dev: &mut Device, id: u16) -> bool {
 /// over: profiles go to host mode, then RGB effects function 5 switches LEDs to software
 /// control (mode 3, flag 0x04 = firmware keeps watching for idle).
 pub fn claim_lighting(dev: &mut Device) -> Result<()> {
+    if dev.lighting_claimed {
+        return Ok(());
+    }
     if has_feature(dev, PROFILE_MANAGEMENT) {
         dev.call(PROFILE_MANAGEMENT, 6, &[0x05])?;
     } else if has_feature(dev, ONBOARD_PROFILES) {
         dev.call(ONBOARD_PROFILES, 1, &[0x02])?;
     } else {
+        dev.lighting_claimed = true;
         return Ok(());
     }
     dev.call(RGB_EFFECTS, 5, &[0x01, 0x03, 0x04])?;
+    dev.lighting_claimed = true;
     Ok(())
 }
 
 /// Hands lighting (and onboard profiles) back to the device firmware.
 pub fn release_lighting(dev: &mut Device) -> Result<()> {
+    dev.lighting_claimed = false;
     dev.call(RGB_EFFECTS, 5, &[0x01, 0x00, 0x00])?;
     if has_feature(dev, PROFILE_MANAGEMENT) {
         dev.call(PROFILE_MANAGEMENT, 6, &[0x03])?;
@@ -145,6 +151,15 @@ pub mod effect_id {
 /// Reply to [cluster, 0xff]: [cluster, _, location (2), effect count, ...];
 /// reply to [cluster, index]: [cluster, index, id (2), capabilities (2), period (2)].
 pub fn cluster_effects(dev: &mut Device, cluster: u8) -> Result<Vec<(u8, u16)>> {
+    if let Some(list) = dev.effect_cache.get(&cluster) {
+        return Ok(list.clone());
+    }
+    let list = read_cluster_effects(dev, cluster)?;
+    dev.effect_cache.insert(cluster, list.clone());
+    Ok(list)
+}
+
+fn read_cluster_effects(dev: &mut Device, cluster: u8) -> Result<Vec<(u8, u16)>> {
     let id_at = |dev: &mut Device, i: u8| -> Result<u16> {
         let r = dev.call(RGB_EFFECTS, 0, &[cluster, i, 0x00])?;
         Ok(u16::from_be_bytes([r[6], r[7]]))
@@ -251,21 +266,25 @@ pub mod perkey {
     }
 }
 
-/// Firmware reactive effect on the all-zones address (id 0x0017 on the G515): keys light
-/// up and ripple outward when pressed, with no host involvement. Parameter layout from
-/// G HUB captures: [r, g, b, 0xff, 0x01, 0x00, 0x00, 0x14]; only the color is known to vary.
-pub fn set_firmware_reactive(dev: &mut Device, rgb: [u8; 3]) -> Result<()> {
+/// Starts a firmware effect by its effect id on `cluster` (0xff = all zones), with up to
+/// 10 parameter bytes; the effect's index is looked up per device.
+pub fn set_cluster_effect(
+    dev: &mut Device,
+    cluster: u8,
+    effect_id: u16,
+    params: &[u8],
+) -> Result<()> {
     claim_lighting(dev)?;
-    let index = cluster_effects(dev, 0xff)?
+    let index = cluster_effects(dev, cluster)?
         .into_iter()
-        .find(|(_, id)| *id == 0x0017)
+        .find(|(_, id)| *id == effect_id)
         .map(|(i, _)| i)
         .ok_or(crate::Error::UnsupportedFeature(RGB_EFFECTS))?;
     let mut p = [0u8; 13];
-    p[0] = 0xff;
+    p[0] = cluster;
     p[1] = index;
-    p[2..5].copy_from_slice(&rgb);
-    p[5..10].copy_from_slice(&[0xff, 0x01, 0x00, 0x00, 0x14]);
+    let n = params.len().min(10);
+    p[2..2 + n].copy_from_slice(&params[..n]);
     p[12] = 0x01;
     dev.call(RGB_EFFECTS, 1, &p)?;
     Ok(())

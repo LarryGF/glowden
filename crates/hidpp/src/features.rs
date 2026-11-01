@@ -101,15 +101,3 @@ pub fn name(id: u16) -> Option<&'static str> {
         _ => return None,
     })
 }
-
-/// G HUB's model name for a product id; resource packages imported from a G HUB install
-/// are filed under these names.
-pub fn ghub_model(product: u16) -> Option<&'static str> {
-    Some(match product {
-        0x40b4 => "g515_ls_tkl",
-        0x4099 => "g502x_plus",
-        0x0b18 => "g522",
-        0x0afc => "yeti_gx",
-        _ => return None,
-    })
-}

@@ -29,16 +29,26 @@ pub struct DeviceView {
     pub caps: Vec<&'static str>,
     pub features: Vec<FeatureView>,
     /// G HUB model name, used to find imported pictures and layouts.
-    pub model: Option<&'static str>,
+    pub model: Option<String>,
+    pub firmware_effects: Vec<FirmwareEffectView>,
+    /// Zone ids are USB key codes − 3 (from the driver file).
+    #[serde(skip)]
+    pub hid_usage_zones: bool,
 }
 
-pub fn build(f: &mut Found) -> DeviceView {
+#[derive(Serialize, Clone)]
+pub struct FirmwareEffectView {
+    pub id: String,
+    pub label: String,
+}
+
+pub fn build(f: &mut Found, driver: Option<&crate::drivers::Driver>) -> DeviceView {
     let dev = &mut f.device;
     let centurion = dev.is_centurion();
     let feats = dev.features().unwrap_or_default();
     let has = |id: u16| feats.iter().any(|(f, _)| *f == id);
 
-    let kind = if has(features::MICROPHONE) {
+    let guessed = if has(features::MICROPHONE) {
         "microphone"
     } else if centurion {
         "headset"
@@ -49,6 +59,13 @@ pub fn build(f: &mut Found) -> DeviceView {
     } else {
         "device"
     };
+    let kind: &'static str = match driver.and_then(|d| d.kind.as_deref()) {
+        Some("keyboard") => "keyboard",
+        Some("mouse") => "mouse",
+        Some("headset") => "headset",
+        Some("microphone") => "microphone",
+        _ => guessed,
+    };
 
     let mut caps = Vec::new();
     if has(features::RGB_EFFECTS) {
@@ -57,12 +74,8 @@ pub fn build(f: &mut Found) -> DeviceView {
     if has(features::PER_KEY_LIGHTING_V2) {
         caps.push("per_key");
     }
-    if kind == "keyboard" {
+    if driver.is_some_and(|d| d.input.reactive) {
         caps.push("reactive");
-        if devices::cluster_effects(dev, 0xff).is_ok_and(|l| l.iter().any(|(_, id)| *id == 0x0017))
-        {
-            caps.push("firmware_ripple");
-        }
     }
     if has(features::BRIGHTNESS) {
         caps.push("brightness");
@@ -113,7 +126,19 @@ pub fn build(f: &mut Found) -> DeviceView {
         battery,
         caps,
         features,
-        model: features::ghub_model(dev.info.product),
+        model: driver.and_then(|d| d.ghub_model.clone()),
+        firmware_effects: driver
+            .map(|d| {
+                d.firmware_effects
+                    .iter()
+                    .map(|e| FirmwareEffectView {
+                        id: e.id.clone(),
+                        label: e.label.clone(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        hid_usage_zones: driver.is_some_and(|d| d.layout.zones.as_deref() == Some("hid-usage")),
     }
 }
 
@@ -123,17 +148,14 @@ pub fn image(model: &str) -> Option<String> {
     let dir = std::path::PathBuf::from(std::env::var_os("HOME")?)
         .join(".local/share/lhub/devices")
         .join(model);
-    const PREFERRED: [&str; 10] = [
+    // Product views only; splash screens and promo cards are marketing art, not the device.
+    const PREFERRED: [&str; 6] = [
         "front.png",
         "front_black.webp",
         "front_graphite.webp",
         "images/device/front_graphite.webp",
         "device_black.webp",
         "front_white.webp",
-        "promotion/card_front_preview.webp",
-        "splash_image_1.webp",
-        "splash_image_1.png",
-        "device_white.webp",
     ];
     let path = PREFERRED.iter().map(|f| dir.join(f)).find(|p| p.exists())?;
     let bytes = std::fs::read(&path).ok()?;

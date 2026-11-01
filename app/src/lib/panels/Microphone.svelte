@@ -20,7 +20,6 @@
 </script>
 
 <div class="panel">
-  <h2>Microphone</h2>
 
   <div class="gain">
     <div class="dial" style:--g={gain ?? 0}>

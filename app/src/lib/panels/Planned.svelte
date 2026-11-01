@@ -3,7 +3,7 @@
 </script>
 
 <div class="panel">
-  <h2>{title} <span class="badge warn">in development</span></h2>
+  <span class="badge warn">in development</span>
   <p>{detail}</p>
 </div>
 
