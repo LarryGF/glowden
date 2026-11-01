@@ -139,11 +139,22 @@ pub mod effect_id {
 /// Reply to [cluster, 0xff]: [cluster, _, location (2), effect count, ...];
 /// reply to [cluster, index]: [cluster, index, id (2), capabilities (2), period (2)].
 pub fn cluster_effects(dev: &mut Device, cluster: u8) -> Result<Vec<(u8, u16)>> {
+    let id_at = |dev: &mut Device, i: u8| -> Result<u16> {
+        let r = dev.call(RGB_EFFECTS, 0, &[cluster, i, 0x00])?;
+        Ok(u16::from_be_bytes([r[6], r[7]]))
+    };
+    if cluster == 0xff {
+        // The all-clusters address has no count query; walk indices until the device refuses.
+        let mut out = Vec::new();
+        for i in 0..32 {
+            match id_at(dev, i) {
+                Ok(id) => out.push((i, id)),
+                Err(crate::Error::Device(..)) => break,
+                Err(e) => return Err(e),
+            }
+        }
+        return Ok(out);
+    }
     let count = dev.call(RGB_EFFECTS, 0, &[cluster, 0xff, 0x00])?[8];
-    (0..count)
-        .map(|i| {
-            let r = dev.call(RGB_EFFECTS, 0, &[cluster, i, 0x00])?;
-            Ok((i, u16::from_be_bytes([r[6], r[7]])))
-        })
-        .collect()
+    (0..count).map(|i| Ok((i, id_at(dev, i)?))).collect()
 }

@@ -134,8 +134,17 @@ fn device_command(query: &str, args: &[String]) -> CmdResult {
         ("unmute", 1) => mic::set_muted(&mut dev, false)?,
         ("release", 1) => devices::release_lighting(&mut dev)?,
         ("effects", 1) => {
-            for (index, id) in devices::cluster_effects(&mut dev, 0)? {
-                println!("{name}: cluster 0 effect {index} = id 0x{id:04x}");
+            for cluster in [0x00, 0xff] {
+                match devices::cluster_effects(&mut dev, cluster) {
+                    Ok(list) => {
+                        for (index, id) in list {
+                            println!(
+                                "{name}: cluster 0x{cluster:02x} effect {index} = id 0x{id:04x}"
+                            );
+                        }
+                    }
+                    Err(e) => println!("{name}: cluster 0x{cluster:02x}: {e}"),
+                }
             }
         }
         _ => return Err(USAGE.into()),

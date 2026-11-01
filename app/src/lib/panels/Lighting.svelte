@@ -6,7 +6,9 @@
   type Mode = Effect["kind"];
   let mode = $state<Mode>("solid");
   let color = $state("#2dd4bf");
-  let period = $state(5000);
+  // Speed 1..100 maps to a 20 s .. 1 s cycle, so dragging right makes it faster.
+  let speed = $state(80);
+  const period = $derived(Math.round(20000 - ((speed - 1) * 19000) / 99));
   let intensity = $state(100);
   let saturation = $state(255);
   let brightness = $state(100);
@@ -53,8 +55,8 @@
 
   {#if mode !== "solid"}
     <label class="row">
-      <span class="label">Speed <em>{(period / 1000).toFixed(1)} s</em></span>
-      <input type="range" min="1000" max="20000" step="100" bind:value={period} oninput={pushEffect} />
+      <span class="label">Speed <em>{(period / 1000).toFixed(1)} s per cycle</em></span>
+      <input type="range" min="1" max="100" bind:value={speed} oninput={pushEffect} />
     </label>
     <label class="row">
       <span class="label">Intensity <em>{intensity}%</em></span>

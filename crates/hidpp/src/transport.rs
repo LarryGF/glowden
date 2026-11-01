@@ -62,6 +62,8 @@ pub struct DeviceInfo {
     pub kernel_name: String,
     /// Receiver-attached devices sit under the receiver's HID++ interface.
     pub wireless: bool,
+    /// Physical USB port (e.g. "3-4.2.2"); stable across replugs, unlike hidraw numbers.
+    pub port: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -214,10 +216,23 @@ impl Device {
         function: u8,
         params: &[u8],
     ) -> Result<[u8; REPLY_LEN]> {
-        match self.bridge {
-            Some(bridge) => self.bridged_request(bridge, feature_index, function, params),
-            None => self.direct_request(feature_index, function, params),
+        // Dozing wireless devices drop single requests; resending wakes them.
+        let attempts = if self.info.wireless || self.bridge.is_some() {
+            3
+        } else {
+            1
+        };
+        let mut last = Err(Error::Timeout);
+        for _ in 0..attempts {
+            last = match self.bridge {
+                Some(bridge) => self.bridged_request(bridge, feature_index, function, params),
+                None => self.direct_request(feature_index, function, params),
+            };
+            if !matches!(last, Err(Error::Timeout)) {
+                break;
+            }
         }
+        last
     }
 
     fn direct_request(
@@ -494,12 +509,24 @@ pub fn enumerate() -> Vec<DeviceInfo> {
         if is_receiver(product) && !parent_is_hid {
             continue;
         }
+        let port = real
+            .ancestors()
+            .filter_map(|p| p.file_name()?.to_str())
+            .find(|c| {
+                c.contains('-')
+                    && !c.contains(':')
+                    && c.chars()
+                        .all(|ch| ch.is_ascii_digit() || ch == '-' || ch == '.')
+            })
+            .unwrap_or("")
+            .to_string();
         out.push(DeviceInfo {
             hidraw: Path::new("/dev").join(&name),
             vendor: LOGITECH,
             product,
             kernel_name: field("HID_NAME="),
             wireless: parent_is_hid,
+            port,
         });
     }
     out
