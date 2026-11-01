@@ -176,6 +176,23 @@ fn device_command(query: &str, args: &[String]) -> CmdResult {
             devices::claim_lighting(&mut dev)?;
             dev.call(hidpp::features::RGB_EFFECTS, 1, &p)?;
         }
+        ("call", 3 | 4) => {
+            // Experiments: feature id, function, optional hex parameters; prints the reply.
+            let feature = u16::from_str_radix(args[1].trim_start_matches("0x"), 16)?;
+            let func: u8 = args[2].parse()?;
+            let hex = args.get(3).map(String::as_str).unwrap_or("");
+            let bytes: Vec<u8> = (0..hex.len() / 2)
+                .map(|i| u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16))
+                .collect::<Result<_, _>>()?;
+            let reply = dev.call(feature, func, &bytes)?;
+            println!(
+                "{}",
+                reply[..32]
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>()
+            );
+        }
         ("animate", 2) => animate(&mut dev, &name, &args[1])?,
         ("zones", 1) => {
             let z = devices::perkey::zones(&mut dev)?;
