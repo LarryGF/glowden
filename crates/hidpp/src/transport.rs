@@ -155,10 +155,28 @@ impl Device {
                 if long { LONG_LEN } else { SHORT_LEN }
             }
         };
+        self.drain()?;
         if debug() {
             eprintln!("{} -> {}", self.info.hidraw.display(), hex(&pkt[..len]));
         }
         self.file.write_all(&pkt[..len])?;
+        Ok(())
+    }
+
+    /// Drops input queued before a request, so a late reply to an earlier request can't be
+    /// taken as the answer to this one.
+    fn drain(&mut self) -> Result<()> {
+        let mut buf = [0u8; CENTURION_LEN];
+        while wait_readable(&self.file, Duration::ZERO)? {
+            let n = self.file.read(&mut buf)?;
+            if debug() {
+                eprintln!(
+                    "{} <- {} (stale, dropped)",
+                    self.info.hidraw.display(),
+                    hex(&buf[..n])
+                );
+            }
+        }
         Ok(())
     }
 
@@ -176,6 +194,9 @@ impl Device {
             let Some(msg) = self.read_message(left)? else {
                 return Err(Error::Timeout);
             };
+            if matches!(self.framing, Framing::HidPP { .. }) && msg[1] != self.index {
+                continue; // another device on the same receiver
+            }
             if msg[2] == 0xff && msg[3] == feature_index && msg[4] == func_sw {
                 return Err(Error::Device(feature_index, msg[5]));
             }

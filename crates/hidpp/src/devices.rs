@@ -1,6 +1,6 @@
 //! Device-level operations decoded from G HUB USB captures.
 
-use crate::features::{BRIGHTNESS, MICROPHONE, RGB_EFFECTS};
+use crate::features::{BRIGHTNESS, MICROPHONE, ONBOARD_PROFILES, PROFILE_MANAGEMENT, RGB_EFFECTS};
 use crate::{Device, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -20,8 +20,39 @@ pub enum Effect {
     },
 }
 
+fn has_feature(dev: &mut Device, id: u16) -> bool {
+    dev.feature(id).is_ok()
+}
+
+/// Devices with onboard profiles refuse lighting writes (error 0x05) until the host takes
+/// over: profiles go to host mode, then RGB effects function 5 switches LEDs to software
+/// control (mode 3, flag 0x04 = firmware keeps watching for idle).
+pub fn claim_lighting(dev: &mut Device) -> Result<()> {
+    if has_feature(dev, PROFILE_MANAGEMENT) {
+        dev.call(PROFILE_MANAGEMENT, 6, &[0x05])?;
+    } else if has_feature(dev, ONBOARD_PROFILES) {
+        dev.call(ONBOARD_PROFILES, 1, &[0x02])?;
+    } else {
+        return Ok(());
+    }
+    dev.call(RGB_EFFECTS, 5, &[0x01, 0x03, 0x04])?;
+    Ok(())
+}
+
+/// Hands lighting (and onboard profiles) back to the device firmware.
+pub fn release_lighting(dev: &mut Device) -> Result<()> {
+    dev.call(RGB_EFFECTS, 5, &[0x01, 0x00, 0x00])?;
+    if has_feature(dev, PROFILE_MANAGEMENT) {
+        dev.call(PROFILE_MANAGEMENT, 6, &[0x03])?;
+    } else if has_feature(dev, ONBOARD_PROFILES) {
+        dev.call(ONBOARD_PROFILES, 1, &[0x01])?;
+    }
+    Ok(())
+}
+
 /// RGB effects (0x8071) function 1 on cluster 0. The trailing 0x01 makes the device keep it.
 pub fn set_effect(dev: &mut Device, effect: Effect) -> Result<()> {
+    claim_lighting(dev)?;
     let mut p = [0u8; 13];
     match effect {
         Effect::Solid { rgb } => {

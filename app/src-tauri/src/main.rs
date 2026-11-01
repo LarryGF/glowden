@@ -108,14 +108,45 @@ fn view(mut f: Found) -> DeviceView {
 
 type CmdResult<T> = Result<T, String>;
 
+/// Appends to ~/.local/state/lhub/lhub.log and mirrors to stderr.
+fn log(msg: &str) {
+    use std::io::Write;
+    let line = format!(
+        "{} {msg}\n",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    );
+    eprint!("{line}");
+    let dir = std::env::var_os("XDG_STATE_HOME")
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| std::path::Path::new(&h).join(".local/state")))
+        .map(|d| d.join("lhub"));
+    if let Some(dir) = dir
+        && std::fs::create_dir_all(&dir).is_ok()
+        && let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join("lhub.log"))
+    {
+        let _ = f.write_all(line.as_bytes());
+    }
+}
+
 /// Device I/O blocks, so every command runs off the UI thread.
 async fn with_device<T: Send + 'static>(
     id: String,
     f: impl FnOnce(&mut hidpp::Device) -> hidpp::Result<T> + Send + 'static,
 ) -> CmdResult<T> {
     tauri::async_runtime::spawn_blocking(move || {
-        let mut found = discover::open_id(&id).ok_or_else(|| format!("device {id} not found"))?;
-        f(&mut found.device).map_err(|e| e.to_string())
+        let result = discover::open_id(&id)
+            .ok_or_else(|| format!("device {id} not found"))
+            .and_then(|mut found| f(&mut found.device).map_err(|e| format!("{}: {e}", found.name)));
+        if let Err(e) = &result {
+            log(&format!("error on {id}: {e}"));
+        }
+        result
     })
     .await
     .map_err(|e| e.to_string())?
@@ -123,9 +154,19 @@ async fn with_device<T: Send + 'static>(
 
 #[tauri::command]
 async fn list_devices() -> CmdResult<Vec<DeviceView>> {
-    tauri::async_runtime::spawn_blocking(|| discover::open_all().into_iter().map(view).collect())
-        .await
-        .map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(|| {
+        let list: Vec<DeviceView> = discover::open_all().into_iter().map(view).collect();
+        log(&format!(
+            "scan: {}",
+            list.iter()
+                .map(|d| format!("{} ({})", d.name, d.id))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+        list
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[derive(Deserialize)]

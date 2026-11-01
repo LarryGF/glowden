@@ -9,6 +9,7 @@ const USAGE: &str = "usage:
   lhub <dev> breathe RRGGBB [period_ms] [intensity%]
   lhub <dev> cycle [period_ms] [intensity%] [saturation]
   lhub <dev> brightness <0-100>
+  lhub <dev> release                         hand lighting/profiles back to the device
   lhub <dev> gain [0-100]                    microphones
   lhub <dev> mute | unmute
 <dev> is a case-insensitive part of the device name, e.g. yeti, g515, g502";
@@ -131,6 +132,7 @@ fn device_command(query: &str, args: &[String]) -> CmdResult {
         ("gain", 2) => mic::set_gain(&mut dev, num(1, 0, 100)? as u8)?,
         ("mute", 1) => mic::set_muted(&mut dev, true)?,
         ("unmute", 1) => mic::set_muted(&mut dev, false)?,
+        ("release", 1) => devices::release_lighting(&mut dev)?,
         _ => return Err(USAGE.into()),
     }
     Ok(())

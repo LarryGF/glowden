@@ -14,7 +14,10 @@ fn try_open(info: &DeviceInfo, slot: Option<u8>) -> Option<Device> {
         None => Device::open(info.clone()).ok()?,
         Some(s) => Device::open_slot(info.clone(), s).ok()?,
     };
-    dev.protocol().ok()?;
+    // Wireless devices can be asleep; the first request wakes them but may time out.
+    if dev.protocol().is_err() && (!info.wireless || dev.protocol().is_err()) {
+        return None;
+    }
     Some(dev)
 }
 
@@ -43,6 +46,9 @@ pub fn open_all() -> Vec<Found> {
         if let Some(dev) = try_open(&info, None) {
             out.push(found(dev, node_name(&info)));
             continue;
+        }
+        if info.wireless {
+            continue; // a per-device node already; receiver slots don't apply
         }
         for slot in 1..=6 {
             if let Some(dev) = try_open(&info, Some(slot)) {
