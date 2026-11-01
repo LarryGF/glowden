@@ -22,7 +22,8 @@ unit (`systemctl --user enable --now lhubd`); the package itself hasn't been tes
 | `crates/lighting` | Key layout, per-key streaming engine, host effects, audio analyzer, key input |
 | `crates/daemon` | `lhubd`: device workers, persistent config, socket API |
 | `crates/cli` | `lhub` command-line tool and experiments |
-| `crates/voice/csrc` | PE loader running Logitech's Blue VO!CE 2 (DTS ClearVoice 2) DLL natively |
+| `crates/voice/loader` | PE loader running Logitech's Blue VO!CE 2 (DTS ClearVoice 2) DLL natively |
+| `tools/voice-probes` | Offline VO!CE engine experiments |
 | `app` | Tauri + Svelte UI, a client of `lhubd` |
 | `packaging` | udev rule, systemd unit, Arch package |
 

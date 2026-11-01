@@ -1,3 +1,8 @@
 /target
 node_modules/
 dist/
+app/src-tauri/gen/
+tools/voice-probes/probe
+tools/voice-probes/probe_process
+tools/voice-probes/probe_blocks
+tools/voice-probes/bench
