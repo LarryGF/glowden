@@ -158,3 +158,89 @@ pub fn cluster_effects(dev: &mut Device, cluster: u8) -> Result<Vec<(u8, u16)>> 
     let count = dev.call(RGB_EFFECTS, 0, &[cluster, 0xff, 0x00])?[8];
     (0..count).map(|i| Ok((i, id_at(dev, i)?))).collect()
 }
+
+/// Per-key lighting (0x8081), as G HUB streams it: colors are staged with function 1
+/// (up to 4 × [zone, r, g, b]) or function 5 (up to 3 × [first, last, r, g, b]) and shown
+/// together by function 7.
+pub mod perkey {
+    use crate::features::{PER_KEY_LIGHTING_V2, RGB_EFFECTS};
+    use crate::{Device, Result};
+
+    /// Zone ids the device has, from the three 16-byte bitmaps returned by function 0.
+    pub fn zones(dev: &mut Device) -> Result<Vec<u8>> {
+        let mut out = Vec::new();
+        for page in 0..3u8 {
+            let r = dev.call(PER_KEY_LIGHTING_V2, 0, &[0x00, page])?;
+            for (byte, bits) in r[6..20].iter().enumerate() {
+                for bit in 0..8 {
+                    if bits & (1 << bit) != 0 {
+                        let zone = page as usize * 112 + byte * 8 + bit;
+                        if zone > 0 && zone < 256 {
+                            out.push(zone as u8);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Switches the device's effect engine over to host-painted frames, as G HUB does
+    /// before streaming (all-zones effect slot 1 with empty parameters).
+    pub fn begin(dev: &mut Device) -> Result<()> {
+        crate::devices::claim_lighting(dev)?;
+        let mut p = [0u8; 13];
+        p[0] = 0xff;
+        p[1] = 0x01;
+        p[12] = 0x01;
+        dev.call(RGB_EFFECTS, 1, &p)?;
+        Ok(())
+    }
+
+    pub fn set_keys(dev: &mut Device, keys: &[(u8, [u8; 3])]) -> Result<()> {
+        for chunk in keys.chunks(4) {
+            let mut p = Vec::with_capacity(16);
+            for (zone, rgb) in chunk {
+                p.push(*zone);
+                p.extend_from_slice(rgb);
+            }
+            dev.call(PER_KEY_LIGHTING_V2, 1, &p)?;
+        }
+        Ok(())
+    }
+
+    pub fn set_ranges(dev: &mut Device, ranges: &[(u8, u8, [u8; 3])]) -> Result<()> {
+        for chunk in ranges.chunks(3) {
+            let mut p = Vec::with_capacity(15);
+            for (first, last, rgb) in chunk {
+                p.extend_from_slice(&[*first, *last]);
+                p.extend_from_slice(rgb);
+            }
+            dev.call(PER_KEY_LIGHTING_V2, 5, &p)?;
+        }
+        Ok(())
+    }
+
+    /// Contiguous runs of zone ids, for painting with function 5.
+    pub fn runs(zones: &[u8]) -> Vec<(u8, u8)> {
+        let mut out: Vec<(u8, u8)> = Vec::new();
+        for &z in zones {
+            match out.last_mut() {
+                Some((_, last)) if *last as u16 + 1 == z as u16 => *last = z,
+                _ => out.push((z, z)),
+            }
+        }
+        out
+    }
+
+    /// Paints every zone one color.
+    pub fn fill(dev: &mut Device, zones: &[u8], rgb: [u8; 3]) -> Result<()> {
+        let ranges: Vec<_> = runs(zones).into_iter().map(|(a, b)| (a, b, rgb)).collect();
+        set_ranges(dev, &ranges)
+    }
+
+    pub fn commit(dev: &mut Device) -> Result<()> {
+        dev.call(PER_KEY_LIGHTING_V2, 7, &[0x00])?;
+        Ok(())
+    }
+}

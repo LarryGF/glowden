@@ -1,0 +1,25 @@
+# Local package: build from this checkout with `makepkg -si` in packaging/arch.
+pkgname=lhub
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Native Linux control for Logitech G devices"
+arch=('x86_64')
+license=('MIT')
+depends=('webkit2gtk-4.1' 'gtk3' 'pipewire' 'systemd-libs')
+makedepends=('rustup' 'pnpm' 'nodejs')
+install=lhub.install
+
+build() {
+  cd "$startdir/../../app"
+  pnpm install --frozen-lockfile
+  pnpm tauri build
+  cd ..
+  cargo build --release -p lhub-cli
+}
+
+package() {
+  local root="$startdir/../.."
+  install -Dm755 "$root/target/release/lhub-app" "$pkgdir/usr/bin/lhub-app"
+  install -Dm755 "$root/target/release/lhub" "$pkgdir/usr/bin/lhub"
+  install -Dm644 "$root/packaging/udev/70-lhub.rules" "$pkgdir/usr/lib/udev/rules.d/70-lhub.rules"
+}

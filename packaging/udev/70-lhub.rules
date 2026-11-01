@@ -1,0 +1,7 @@
+# lhub device access for the user logged in at the seat (uaccess, applied by 73-seat-late).
+
+# HID++ control of Logitech devices: receivers, wired devices and their paired devices.
+SUBSYSTEM=="hidraw", KERNEL=="hidraw*", ATTRS{idVendor}=="046d", TAG+="uaccess"
+
+# Key presses from Logitech keyboards only, for reactive lighting effects.
+SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_KEYBOARD}=="1", ATTRS{idVendor}=="046d", TAG+="uaccess"

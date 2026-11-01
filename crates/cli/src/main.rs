@@ -133,6 +133,32 @@ fn device_command(query: &str, args: &[String]) -> CmdResult {
         ("mute", 1) => mic::set_muted(&mut dev, true)?,
         ("unmute", 1) => mic::set_muted(&mut dev, false)?,
         ("release", 1) => devices::release_lighting(&mut dev)?,
+        ("zones", 1) => {
+            let z = devices::perkey::zones(&mut dev)?;
+            println!(
+                "{name}: {} zones: {}",
+                z.len(),
+                z.iter()
+                    .map(|z| format!("{z:02x}"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+        }
+        ("fill", 2) => {
+            let c = rgb(&args[1])?;
+            let zones = devices::perkey::zones(&mut dev)?;
+            devices::perkey::begin(&mut dev)?;
+            devices::perkey::fill(&mut dev, &zones, c)?;
+            devices::perkey::commit(&mut dev)?;
+        }
+        ("key", 3) => {
+            let zone = u8::from_str_radix(args[1].trim_start_matches("0x"), 16)?;
+            let zones = devices::perkey::zones(&mut dev)?;
+            devices::perkey::begin(&mut dev)?;
+            devices::perkey::fill(&mut dev, &zones, [0, 0, 0])?;
+            devices::perkey::set_keys(&mut dev, &[(zone, rgb(&args[2])?)])?;
+            devices::perkey::commit(&mut dev)?;
+        }
         ("effects", 1) => {
             for cluster in [0x00, 0xff] {
                 match devices::cluster_effects(&mut dev, cluster) {
