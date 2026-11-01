@@ -53,6 +53,8 @@ struct Animation {
     effect: Box<dyn Effect>,
     presses: Option<Receiver<Press>>,
     recent: Vec<Press>,
+    /// Consecutive frames the device didn't take; a few are normal on a busy device.
+    failures: u32,
 }
 
 pub fn spawn(mut found: Found, config: DeviceConfig, driver: Option<Driver>) -> Handle {
@@ -132,9 +134,22 @@ fn run(
                 a.recent.extend(rx.try_iter());
             }
             a.recent.retain(|p| p.at.elapsed() < Duration::from_secs(4));
-            a.streamer
+            if let Err(e) = a
+                .streamer
                 .frame(&mut found.device, a.effect.as_mut(), &a.recent)
-                .map_err(|e| format!("animation: {e}"))?;
+            {
+                a.failures += 1;
+                if a.failures < 5 {
+                    continue;
+                }
+                // Stop the effect instead of dropping the device: restarting it would only
+                // fail the same way, in a reconnect loop.
+                eprintln!("{}: live effect stopped: {e}", found.id);
+                anim = None;
+                lights.lock().unwrap().mode = "device";
+                continue;
+            }
+            a.failures = 0;
             let mut l = lights.lock().unwrap();
             l.mode = "live";
             l.zones = a
@@ -286,6 +301,7 @@ fn apply(
                         effect,
                         presses,
                         recent: Vec::new(),
+                        failures: 0,
                     });
                 }
             }
