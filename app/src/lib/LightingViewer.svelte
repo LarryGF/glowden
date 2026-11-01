@@ -33,32 +33,14 @@
   onDestroy(() => clearInterval(timer));
 
   /**
-   * The lit layer may only show where the photo has light-emitting surfaces: bright legend
-   * pixels on keyboards, the lighter diffuser regions elsewhere. That alpha mask is computed
-   * once from the photo's luminance.
+   * Device pictures have transparent cutouts where light shines through (key legends, the
+   * Yeti GX logo glyph, diffusers). The lit layer is the LED shapes restricted to those
+   * holes; the photo's opaque parts are drawn around it. Computed once per layout.
    */
   async function prepare(l: Layout) {
     photo = new Image();
     photo.src = l.image;
     await photo.decode();
-    const [lo, hi] = l.legends ? [0.42, 0.7] : [0.12, 0.45];
-    mask = document.createElement("canvas");
-    mask.width = l.width;
-    mask.height = l.height;
-    const m = mask.getContext("2d", { willReadFrequently: true })!;
-    m.drawImage(photo, 0, 0, l.width, l.height);
-    const px = m.getImageData(0, 0, l.width, l.height);
-    const d = px.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const lum = (0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2]) / 255;
-      const a = Math.min(1, Math.max(0, (lum - lo) / (hi - lo)));
-      d[i] = d[i + 1] = d[i + 2] = 255;
-      d[i + 3] = (a * d[i + 3]) | 0;
-    }
-    m.putImageData(px, 0, 0);
-    layer = document.createElement("canvas");
-    layer.width = l.width;
-    layer.height = l.height;
     paths = l.shapes.map(({ zone, shape }) => {
       const p = new Path2D();
       if (shape.type === "rect") p.roundRect(shape.rect.x, shape.rect.y, shape.rect.width, shape.rect.height, 10);
@@ -66,6 +48,17 @@
       else p.addPath(new Path2D(shape.d));
       return { zone, path: p };
     });
+    mask = document.createElement("canvas");
+    mask.width = l.width;
+    mask.height = l.height;
+    const m = mask.getContext("2d")!;
+    m.fillStyle = "#fff";
+    for (const { path } of paths) m.fill(path);
+    m.globalCompositeOperation = "destination-out";
+    m.drawImage(photo, 0, 0, l.width, l.height);
+    layer = document.createElement("canvas");
+    layer.width = l.width;
+    layer.height = l.height;
     draw();
   }
 
@@ -78,28 +71,30 @@
   function draw() {
     if (!canvas || !layout || !photo || !mask || !layer) return;
     const ctx = canvas.getContext("2d")!;
+    const lit = live || freestyle.active;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(photo, 0, 0, layout.width, layout.height);
-    if (!(live || freestyle.active)) return;
 
     const lc = layer.getContext("2d")!;
     lc.globalCompositeOperation = "source-over";
     lc.clearRect(0, 0, layer.width, layer.height);
     for (const { zone, path } of paths) {
-      lc.fillStyle = color(zone);
+      lc.fillStyle = lit ? color(zone) : "#3a3d44";
       lc.fill(path);
     }
     lc.globalCompositeOperation = "destination-in";
     lc.drawImage(mask, 0, 0);
 
-    // A soft halo first, then the crisp lit pixels on top.
-    ctx.save();
-    ctx.globalAlpha = 0.55;
-    ctx.filter = "blur(6px)";
-    ctx.drawImage(layer, 0, 0);
-    ctx.restore();
+    if (lit) {
+      ctx.save();
+      ctx.globalAlpha = 0.6;
+      ctx.filter = "blur(5px)";
+      ctx.drawImage(layer, 0, 0);
+      ctx.restore();
+    }
     ctx.drawImage(layer, 0, 0);
   }
+
 
   function paint(e: MouseEvent) {
     if (!freestyle.active || !canvas || !layout) return;
