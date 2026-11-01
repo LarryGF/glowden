@@ -42,6 +42,21 @@
   let brightness = $state(100);
   let loaded = $state(false);
   let tab = $state<"presets" | "freestyle">("presets");
+  let power = $state(true);
+  let syncMessage = $state("");
+
+  function setPower() {
+    api.setPower(device.id, power).catch(onerror);
+  }
+
+  async function sync() {
+    try {
+      const names = await api.syncLighting(device.id);
+      syncMessage = names.length ? `Applied to ${names.join(", ")}` : "No other device can show this effect";
+    } catch (e) {
+      onerror(e);
+    }
+  }
   const canPaint = $derived(device.caps.includes("per_key"));
 
   const swatches = ["#ff2a2a", "#ff8a00", "#ffd400", "#2dd4bf", "#2f7bff", "#8b5cf6", "#ff3ea5", "#ffffff"];
@@ -74,6 +89,7 @@
         }
       }
       if (cfg.brightness !== undefined) brightness = cfg.brightness;
+      power = cfg.power ?? true;
     } catch (e) {
       onerror(e);
     }
@@ -123,6 +139,12 @@
 </script>
 
 <div class="panel">
+  <label class="power">
+    <span class="label">Power</span>
+    <button class="switch" class:on={power} onclick={() => { power = !power; setPower(); }} aria-pressed={power}>{power ? "On" : "Off"}</button>
+  </label>
+
+  <div class:disabled={!power} class="body">
   {#if canPaint}
     <div class="tabs">
       <button class:active={tab === "presets"} onclick={() => { tab = "presets"; push(); }}>Presets</button>
@@ -202,6 +224,13 @@
 
   {/if}
 
+  </div>
+
+  <div class="sync">
+    <button onclick={sync} disabled={!power}>Sync lighting to all devices</button>
+    {#if syncMessage}<span class="note">{syncMessage}</span>{/if}
+  </div>
+
   <p class="note">
     {tab === "freestyle"
       ? "Freestyle is sent to the device once and stays there."
@@ -213,6 +242,12 @@
 
 <style>
   .panel { display: flex; flex-direction: column; gap: 26px; }
+  .body { display: flex; flex-direction: column; gap: 26px; }
+  .body.disabled { opacity: 0.35; pointer-events: none; }
+  .power { flex-direction: row; align-items: center; justify-content: space-between; }
+  .switch { min-width: 64px; border-radius: 999px; font-weight: 700; }
+  .switch.on { background: var(--text); color: var(--bg); border-color: transparent; }
+  .sync { display: flex; flex-direction: column; gap: 8px; }
   .tabs { display: flex; gap: 18px; border-bottom: 1px solid var(--line); }
   .tabs button { border: none; background: none; border-radius: 0; padding: 8px 2px; color: var(--text-dim); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; font-size: 12px; }
   .tabs button.active { color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }

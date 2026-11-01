@@ -102,13 +102,22 @@ fn run(
         match rx.recv_timeout(wait).map(|cmd| coalesce(cmd, &rx)) {
             Ok(cmds) => {
                 for cmd in cmds {
-                    let applied = match &cmd {
-                        Cmd::Apply(cfg) => cfg.lighting.clone(),
-                        _ => None,
+                    let (applied, power) = match &cmd {
+                        Cmd::Apply(cfg) => (
+                            cfg.lighting.clone().filter(|_| cfg.power != Some(false)),
+                            cfg.power,
+                        ),
+                        _ => (None, None),
                     };
                     handle(&mut found, driver, cmd, &mut anim)?;
                     if let Some(l) = applied {
                         record_device_lighting(&mut found, &l, anim.is_some(), &lights);
+                    }
+                    if let Some(false) = power {
+                        let mut st = lights.lock().unwrap();
+                        st.mode = "device";
+                        st.effect = Some("off".into());
+                        st.zones.values_mut().for_each(|c| *c = "#000000".into());
                     }
                 }
             }
@@ -139,7 +148,11 @@ fn run(
         if last_battery.elapsed() > Duration::from_secs(60) {
             last_battery = Instant::now();
             if let Ok((percent, charging)) = devices::battery(&mut found.device) {
-                view.lock().unwrap().battery = Some(view::Battery { percent, charging });
+                view.lock().unwrap().battery = Some(view::Battery {
+                    percent,
+                    charging,
+                    hours: None,
+                });
             }
         }
     }
@@ -229,6 +242,18 @@ fn apply(
     anim: &mut Option<Animation>,
 ) -> Result<(), ApplyError> {
     let dev = &mut found.device;
+    if cfg.power == Some(false) {
+        *anim = None;
+        // Devices with an "off" effect use it; others (Yeti GX) go to brightness 0.
+        let has_off =
+            devices::cluster_effects(dev, 0).is_ok_and(|l| l.iter().any(|(_, id)| *id == 0));
+        if has_off {
+            devices::set_cluster_effect(dev, 0, 0x0000, &[])?;
+        } else if dev.feature(hidpp::features::BRIGHTNESS).is_ok() {
+            devices::set_brightness(dev, 0)?;
+        }
+        return Ok(());
+    }
     if let Some(lighting) = &cfg.lighting {
         if lighting.is_host_rendered() {
             let effect = host_effect(lighting)?;

@@ -17,7 +17,7 @@
           <button class="open" onclick={() => onopen(d)} aria-label="Open {d.name}">
             <h2>{d.name}</h2>
             <div class="meta">
-              {#if d.battery}<span class:low={d.battery.percent <= 15}>{d.battery.percent}%{d.battery.charging ? " ⚡" : ""}</span>{/if}
+              {#if d.battery}<span class:low={d.battery.percent <= 15}>{d.battery.percent}%{d.battery.charging ? " ⚡" : ""}{#if d.battery.hours && !d.battery.charging} · {Math.round(d.battery.hours)} h{/if}</span>{/if}
               <span>{d.connection === "LIGHTSPEED" ? "Wireless" : "USB"}</span>
             </div>
             <div class="picture"><DeviceVisual device={d} size={d.kind === "keyboard" ? 520 : 230} /></div>

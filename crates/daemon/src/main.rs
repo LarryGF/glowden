@@ -1,6 +1,7 @@
 //! lhubd: owns the devices, keeps their configuration applied, and serves the UI over a
 //! Unix socket with one JSON request/response per line.
 
+mod battery;
 mod config;
 mod drivers;
 mod view;
@@ -157,6 +158,13 @@ enum Request {
     LightingState {
         id: String,
     },
+    SetPower {
+        id: String,
+        on: bool,
+    },
+    SyncLighting {
+        from: String,
+    },
     MouseInfo {
         id: String,
     },
@@ -204,6 +212,12 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
                 .values()
                 .map(|h| h.view.lock().unwrap().clone())
                 .collect();
+            for v in views.iter_mut() {
+                let cfg = st.config.devices.get(&v.id).cloned().unwrap_or_default();
+                if let (Some(b), Some(model)) = (v.battery.as_mut(), v.model.as_deref()) {
+                    b.hours = battery::hours_left(model, b.percent, &cfg);
+                }
+            }
             views.sort_by(|a, b| a.kind.cmp(b.kind).then(a.name.cmp(&b.name)));
             Ok(json!(views))
         }
@@ -232,6 +246,8 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
         Request::GetGain { id } => ask(shared, &id, Cmd::GetGain),
         Request::SetGain { id, gain } => ask(shared, &id, |tx| Cmd::SetGain(gain, tx)),
         Request::SetMuted { id, muted } => ask(shared, &id, |tx| Cmd::SetMuted(muted, tx)),
+        Request::SetPower { id, on } => update(shared, &id, |c| c.power = Some(on)),
+        Request::SyncLighting { from } => sync_lighting(shared, &from),
         Request::MouseInfo { id } => ask(shared, &id, Cmd::MouseInfo),
         Request::DeviceLayout { id } => {
             let st = lock.lock().unwrap();
@@ -308,4 +324,53 @@ fn ask(
     }
     rx.recv_timeout(Duration::from_secs(5))
         .map_err(|_| format!("device {id} did not respond"))?
+}
+
+/// Copies a device's lighting to every other connected device that can show it. Firmware
+/// and freestyle effects are device-specific; live effects need per-key lighting.
+fn sync_lighting(shared: &Shared, from: &str) -> Result<Value, String> {
+    let (lighting, brightness, targets) = {
+        let st = shared.0.lock().unwrap();
+        let src = st.config.devices.get(from).cloned().unwrap_or_default();
+        let lighting = src.lighting.ok_or("this device has no lighting set yet")?;
+        let targets: Vec<(String, String, bool)> = st
+            .workers
+            .iter()
+            .filter(|(id, _)| id.as_str() != from)
+            .map(|(id, h)| {
+                let v = h.view.lock().unwrap();
+                (
+                    id.clone(),
+                    v.name.clone(),
+                    v.caps.contains(&"lighting"),
+                    v.caps.contains(&"per_key"),
+                )
+            })
+            .filter(|(_, _, lit, _)| *lit)
+            .map(|(id, name, _, per_key)| (id, name, per_key))
+            .collect();
+        (lighting, src.brightness, targets)
+    };
+    if matches!(
+        lighting,
+        Lighting::Firmware { .. } | Lighting::Ripple { .. } | Lighting::Freestyle { .. }
+    ) {
+        return Err("firmware and freestyle lighting are specific to one device".into());
+    }
+    let mut synced = Vec::new();
+    for (id, name, per_key) in targets {
+        if lighting.is_host_rendered() && !per_key {
+            continue;
+        }
+        let l = lighting.clone();
+        update(shared, &id, |c| {
+            c.lighting = Some(l);
+            c.power = Some(true);
+            if brightness.is_some() {
+                c.brightness = brightness;
+            }
+        })?;
+        synced.push(name);
+    }
+    Ok(json!(synced))
 }

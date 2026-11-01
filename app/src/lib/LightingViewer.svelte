@@ -9,103 +9,138 @@
   let layout = $state<Layout | null>(null);
   let loaded = $state(false);
   let state = $state<LightState | null>(null);
+  let canvas = $state<HTMLCanvasElement>();
   let timer: ReturnType<typeof setInterval> | undefined;
-  const uid = Math.random().toString(36).slice(2, 8);
+
+  // Drawing resources, built once per layout.
+  let photo: HTMLImageElement | null = null;
+  let mask: HTMLCanvasElement | null = null;
+  let layer: HTMLCanvasElement | null = null;
+  let paths: { zone: number; path: Path2D }[] = [];
 
   onMount(async () => {
     layout = await api.deviceLayout(device.id).catch(() => null);
     loaded = true;
-    const poll = () => api.lightingState(device.id).then((s) => (state = s)).catch(() => {});
+    if (layout) await prepare(layout);
+    const poll = () =>
+      api.lightingState(device.id).then((s) => {
+        state = s;
+        draw();
+      }).catch(() => {});
     poll();
     timer = setInterval(poll, 100);
   });
   onDestroy(() => clearInterval(timer));
 
-  /** While painting, show the brush strokes immediately instead of waiting for the device. */
+  /**
+   * The lit layer may only show where the photo has light-emitting surfaces: bright legend
+   * pixels on keyboards, the lighter diffuser regions elsewhere. That alpha mask is computed
+   * once from the photo's luminance.
+   */
+  async function prepare(l: Layout) {
+    photo = new Image();
+    photo.src = l.image;
+    await photo.decode();
+    const [lo, hi] = l.legends ? [0.42, 0.7] : [0.12, 0.45];
+    mask = document.createElement("canvas");
+    mask.width = l.width;
+    mask.height = l.height;
+    const m = mask.getContext("2d", { willReadFrequently: true })!;
+    m.drawImage(photo, 0, 0, l.width, l.height);
+    const px = m.getImageData(0, 0, l.width, l.height);
+    const d = px.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const lum = (0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2]) / 255;
+      const a = Math.min(1, Math.max(0, (lum - lo) / (hi - lo)));
+      d[i] = d[i + 1] = d[i + 2] = 255;
+      d[i + 3] = (a * d[i + 3]) | 0;
+    }
+    m.putImageData(px, 0, 0);
+    layer = document.createElement("canvas");
+    layer.width = l.width;
+    layer.height = l.height;
+    paths = l.shapes.map(({ zone, shape }) => {
+      const p = new Path2D();
+      if (shape.type === "rect") p.roundRect(shape.rect.x, shape.rect.y, shape.rect.width, shape.rect.height, 10);
+      else if (shape.type === "circle") p.arc(shape.rect.x, shape.rect.y, shape.rect.r, 0, Math.PI * 2);
+      else p.addPath(new Path2D(shape.d));
+      return { zone, path: p };
+    });
+    draw();
+  }
+
+  /** While painting, show strokes immediately instead of waiting for the device. */
   function color(zone: number): string {
     if (freestyle.active) return freestyle.keys[String(zone)] ?? freestyle.base;
     return state?.zones[String(zone)] ?? "#000000";
   }
 
-  function paint(zone: number) {
+  function draw() {
+    if (!canvas || !layout || !photo || !mask || !layer) return;
+    const ctx = canvas.getContext("2d")!;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(photo, 0, 0, layout.width, layout.height);
+    if (!(live || freestyle.active)) return;
+
+    const lc = layer.getContext("2d")!;
+    lc.globalCompositeOperation = "source-over";
+    lc.clearRect(0, 0, layer.width, layer.height);
+    for (const { zone, path } of paths) {
+      lc.fillStyle = color(zone);
+      lc.fill(path);
+    }
+    lc.globalCompositeOperation = "destination-in";
+    lc.drawImage(mask, 0, 0);
+
+    // A soft halo first, then the crisp lit pixels on top.
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    ctx.filter = "blur(6px)";
+    ctx.drawImage(layer, 0, 0);
+    ctx.restore();
+    ctx.drawImage(layer, 0, 0);
+  }
+
+  function paint(e: MouseEvent) {
+    if (!freestyle.active || !canvas || !layout) return;
+    const r = canvas.getBoundingClientRect();
+    // The canvas keeps its aspect ratio inside the box (object-fit: contain).
+    const scale = Math.min(r.width / layout.width, r.height / layout.height);
+    const x = (e.clientX - r.left - (r.width - layout.width * scale) / 2) / scale;
+    const y = (e.clientY - r.top - (r.height - layout.height * scale) / 2) / scale;
+    const ctx = canvas.getContext("2d")!;
+    const hit = paths.find(({ path }) => ctx.isPointInPath(path, x, y));
+    if (hit) paintZone(hit.zone);
+  }
+
+  function paintZone(zone: number) {
     if (!freestyle.active) return;
     const k = String(zone);
     freestyle.keys[k] = freestyle.keys[k] === freestyle.brush ? freestyle.base : freestyle.brush;
     freestyle.onchange();
+    draw();
   }
 
-  const view = $derived(
-    layout?.crop
-      ? `${layout.crop.x - 20} ${layout.crop.y - 20} ${layout.crop.width + 40} ${layout.crop.height + 40}`
-      : layout
-        ? `0 0 ${layout.width} ${layout.height}`
-        : "",
-  );
+  $effect(() => {
+    // Redraw when painting mode or the live flag changes.
+    void freestyle.active;
+    void live;
+    draw();
+  });
+
   const zones = $derived(Object.keys(state?.zones ?? {}).map(Number).sort((a, b) => a - b));
   const animation = $derived(state?.mode === "device" ? state.effect : null);
-  const showLeds = $derived(live || freestyle.active);
 </script>
 
 <div class="stage {animation ?? ''}" class:painting={freestyle.active}>
   {#if layout}
-    <svg viewBox={view} preserveAspectRatio="xMidYMid meet">
-      <defs>
-        <!-- Bright legend pixels of the photo become the alpha of the lit layer. -->
-        <filter id="legend-{uid}" color-interpolation-filters="sRGB">
-          <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0.3 0.59 0.11 0 0" />
-          <feComponentTransfer><feFuncA type="linear" slope="4.5" intercept="-1.9" /></feComponentTransfer>
-        </filter>
-        <mask id="legend-mask-{uid}" maskUnits="userSpaceOnUse" x="0" y="0" width={layout.width} height={layout.height}>
-          <image href={layout.image} width={layout.width} height={layout.height} filter="url(#legend-{uid})" />
-        </mask>
-        <filter id="bloom-{uid}"><feGaussianBlur stdDeviation="6" /></filter>
-      </defs>
-
-      <image href={layout.image} width={layout.width} height={layout.height} />
-
-      {#if showLeds}
-        {#snippet shapes(fillFor: (z: number) => string)}
-          {#each layout!.shapes as { zone, shape }}
-            {#if shape.type === "rect"}
-              <rect x={shape.rect.x} y={shape.rect.y} width={shape.rect.width} height={shape.rect.height} rx="10" fill={fillFor(zone)} />
-            {:else if shape.type === "circle"}
-              <circle cx={shape.rect.x} cy={shape.rect.y} r={shape.rect.r} fill={fillFor(zone)} />
-            {:else}
-              <path d={shape.d} fill={fillFor(zone)} />
-            {/if}
-          {/each}
-        {/snippet}
-
-        {#if layout.legends}
-          <g mask="url(#legend-mask-{uid})">
-            <g filter="url(#bloom-{uid})" opacity="0.7">{@render shapes(color)}</g>
-            {@render shapes(color)}
-          </g>
-        {:else}
-          <g class="tint">{@render shapes(color)}</g>
-          <g class="glow">{@render shapes(color)}</g>
-        {/if}
-
-        {#if freestyle.active}
-          <g class="hit">{@render shapes(() => "transparent")}</g>
-          {#each layout.shapes as { zone, shape }}
-            {#if shape.type === "rect"}
-              <rect class="target" x={shape.rect.x} y={shape.rect.y} width={shape.rect.width} height={shape.rect.height} rx="10" onclick={() => paint(zone)} role="button" tabindex="-1" aria-label="zone {zone}" />
-            {:else if shape.type === "circle"}
-              <circle class="target" cx={shape.rect.x} cy={shape.rect.y} r={shape.rect.r} onclick={() => paint(zone)} role="button" tabindex="-1" aria-label="zone {zone}" />
-            {:else}
-              <path class="target" d={shape.d} onclick={() => paint(zone)} role="button" tabindex="-1" aria-label="zone {zone}" />
-            {/if}
-          {/each}
-        {/if}
-      {/if}
-    </svg>
+    <canvas bind:this={canvas} width={layout.width} height={layout.height} onclick={paint}></canvas>
   {:else if loaded}
     <div class="plain"><DeviceVisual {device} size={420} /></div>
-    {#if showLeds && zones.length}
+    {#if (live || freestyle.active) && zones.length}
       <div class="strip">
         {#each zones as z}
-          <button class="dot" style:background={color(z)} title="zone {z}" onclick={() => paint(z)} aria-label="zone {z}"></button>
+          <button class="dot" style:background={color(z)} title="zone {z}" onclick={() => paintZone(z)} aria-label="zone {z}"></button>
         {/each}
       </div>
     {/if}
@@ -114,16 +149,12 @@
 
 <style>
   .stage { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
-  svg { width: 100%; height: 100%; max-height: 74vh; display: block; filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.6)); }
-  /* Non-keyboard LEDs: keep the photo's shading, take the zone's hue, add a little light. */
-  .tint { mix-blend-mode: color; }
-  .glow { mix-blend-mode: screen; opacity: 0.35; }
-  .breathing .tint, .breathing .glow, .breathing :global(g[mask]) { animation: breathe 3s ease-in-out infinite; }
-  .cycle svg { animation: hue 6s linear infinite; }
-  @keyframes breathe { 50% { opacity: 0.2; } }
+  canvas { width: 100%; height: 100%; max-height: 74vh; object-fit: contain; display: block; filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.6)); }
+  .painting canvas { cursor: crosshair; }
+  .breathing canvas { animation: breathe 3s ease-in-out infinite; }
+  .cycle canvas { animation: hue 6s linear infinite; }
+  @keyframes breathe { 50% { filter: brightness(0.6) drop-shadow(0 18px 40px rgba(0, 0, 0, 0.6)); } }
   @keyframes hue { to { filter: hue-rotate(360deg) drop-shadow(0 18px 40px rgba(0, 0, 0, 0.6)); } }
-  .target { fill: transparent; cursor: crosshair; }
-  .target:hover { fill: rgba(255, 255, 255, 0.12); }
   .plain { display: grid; place-items: center; color: var(--text-dim); }
   .strip { display: flex; gap: 12px; justify-content: center; }
   .dot { width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 1px solid var(--line); }

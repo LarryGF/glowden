@@ -95,6 +95,9 @@ pub struct DeviceConfig {
     pub dpi_levels: Vec<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dpi_level: Option<usize>,
+    /// Lighting power switch; off keeps `lighting` for when it's switched back on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub power: Option<bool>,
     /// Report interval in ms (1 = 1000 Hz).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub report_interval: Option<u8>,

@@ -8,7 +8,7 @@ export interface Device {
   kind: Kind;
   product: string;
   connection: "USB" | "LIGHTSPEED";
-  battery: { percent: number; charging: boolean } | null;
+  battery: { percent: number; charging: boolean; hours?: number } | null;
   caps: string[];
   features: { id: string; name: string; version: number }[];
   model: string | null;
@@ -32,6 +32,7 @@ export type Lighting =
 export interface DeviceConfig {
   lighting?: Lighting;
   brightness?: number;
+  power?: boolean;
   dpi_levels?: number[];
   dpi_level?: number;
   report_interval?: number;
@@ -76,6 +77,8 @@ export const api = {
   getConfig: (id: string) => request<DeviceConfig>({ cmd: "get_config", id }),
   setLighting: (id: string, lighting: Lighting) => request<void>({ cmd: "set_lighting", id, lighting }),
   setBrightness: (id: string, percent: number) => request<void>({ cmd: "set_brightness", id, percent }),
+  setPower: (id: string, on: boolean) => request<void>({ cmd: "set_power", id, on }),
+  syncLighting: (from: string) => request<string[]>({ cmd: "sync_lighting", from }),
   release: (id: string) => request<void>({ cmd: "release", id }),
   deviceLayout: (id: string) => request<Layout | null>({ cmd: "device_layout", id }),
   lightingState: (id: string) => request<LightState>({ cmd: "lighting_state", id }),

@@ -86,7 +86,7 @@
       <span class="connection">{device.connection}</span>
       {#if device.battery}
         <span class="battery" class:low={device.battery.percent <= 15}>
-          {device.battery.percent}%{device.battery.charging ? " · charging" : ""}
+          {device.battery.percent}%{device.battery.charging ? " · charging" : ""}{#if device.battery.hours && !device.battery.charging} · approx {Math.round(device.battery.hours)} h{/if}
         </span>
       {/if}
     </div>

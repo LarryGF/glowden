@@ -16,6 +16,9 @@ pub struct FeatureView {
 pub struct Battery {
     pub percent: u8,
     pub charging: bool,
+    /// Estimated hours left at the current settings (needs the imported power model).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hours: Option<f32>,
 }
 
 #[derive(Serialize, Clone)]
@@ -99,7 +102,11 @@ pub fn build(f: &mut Found, driver: Option<&crate::drivers::Driver>) -> DeviceVi
     let battery = has(features::UNIFIED_BATTERY)
         .then(|| devices::battery(dev).ok())
         .flatten()
-        .map(|(percent, charging)| Battery { percent, charging });
+        .map(|(percent, charging)| Battery {
+            percent,
+            charging,
+            hours: None,
+        });
 
     let features = feats
         .iter()
