@@ -1,6 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { onDestroy } from "svelte";
   import { api, debounce, type Device, type Lighting } from "../api";
+  import ColorPicker from "../ColorPicker.svelte";
+  import { freestyle } from "../freestyle.svelte";
 
   let { device, onerror }: { device: Device; onerror: (e: unknown) => void } = $props();
 
@@ -38,6 +41,8 @@
   let backdrop = $state(100);
   let brightness = $state(100);
   let loaded = $state(false);
+  let tab = $state<"presets" | "freestyle">("presets");
+  const canPaint = $derived(device.caps.includes("per_key"));
 
   const swatches = ["#ff2a2a", "#ff8a00", "#ffd400", "#2dd4bf", "#2f7bff", "#8b5cf6", "#ff3ea5", "#ffffff"];
 
@@ -46,7 +51,11 @@
       const cfg = await api.getConfig(device.id);
       const l = cfg.lighting;
       if (l) {
-        if (l.effect === "firmware") {
+        if (l.effect === "freestyle") {
+          freestyle.base = l.base;
+          freestyle.keys = { ...l.keys };
+          tab = "freestyle";
+        } else if (l.effect === "firmware") {
           ({ color, glow } = l);
           effect = `fw:${l.id}`;
         } else if (l.effect === "ripple") {
@@ -85,6 +94,22 @@
   }
 
   const push = debounce(() => loaded && api.setLighting(device.id, lighting()).catch(onerror), 120);
+  const pushFreestyle = debounce(
+    () => loaded && api.setLighting(device.id, { effect: "freestyle", base: freestyle.base, keys: { ...freestyle.keys } }).catch(onerror),
+    150,
+  );
+
+  // The stage paints keys while the Freestyle tab is open; every stroke is saved.
+  $effect(() => {
+    freestyle.active = tab === "freestyle";
+    freestyle.onchange = pushFreestyle;
+  });
+  onDestroy(() => (freestyle.active = false));
+
+  function clearPaint() {
+    freestyle.keys = {};
+    pushFreestyle();
+  }
   const pushBrightness = debounce(() => api.setBrightness(device.id, brightness).catch(onerror));
 
   const current = $derived(options.find((o) => o.key === effect));
@@ -98,6 +123,22 @@
 </script>
 
 <div class="panel">
+  {#if canPaint}
+    <div class="tabs">
+      <button class:active={tab === "presets"} onclick={() => { tab = "presets"; push(); }}>Presets</button>
+      <button class:active={tab === "freestyle"} onclick={() => { tab = "freestyle"; pushFreestyle(); }}>Freestyle</button>
+    </div>
+  {/if}
+
+  {#if tab === "freestyle"}
+    <section>
+      <p class="note">Click keys on the picture to paint them; click again to clear one.</p>
+      <span class="label">Brush</span>
+      <ColorPicker bind:value={freestyle.brush} onchange={() => {}} />
+      <label class="inline"><span class="label">Unpainted keys</span><input type="color" bind:value={freestyle.base} oninput={pushFreestyle} /></label>
+      <button onclick={clearPaint}>Clear all</button>
+    </section>
+  {:else}
   <section>
     <h3>On the device</h3>
     <div class="effects">
@@ -118,12 +159,7 @@
   {#if hasColor}
     <section>
       <span class="label">{colorLabel}</span>
-      <div class="swatches">
-        {#each swatches as s}
-          <button class="swatch" class:active={color === s} style:background={s} aria-label={s} onclick={() => { color = s; push(); }}></button>
-        {/each}
-        <input type="color" bind:value={color} oninput={push} aria-label="Custom color" />
-      </div>
+      <ColorPicker bind:value={color} onchange={push} />
       {#if effect === "visualizer"}
         <label class="inline"><span class="label">Peak color</span><input type="color" bind:value={peak} oninput={push} /></label>
       {/if}
@@ -135,7 +171,6 @@
       {/if}
     </section>
   {/if}
-
   <section>
     {#if hasSpeed}
       <label><span class="label">Speed <em>{speed}</em></span><input type="range" min="1" max="100" bind:value={speed} oninput={push} /></label>
@@ -165,8 +200,12 @@
     {/if}
   </section>
 
+  {/if}
+
   <p class="note">
-    {current?.group === "live"
+    {tab === "freestyle"
+      ? "Freestyle is sent to the device once and stays there."
+      : current?.group === "live"
       ? "Live effects keep running after you close this window, as long as the lhub service runs."
       : "This effect runs on the device itself and stays after the service stops."}
   </p>
@@ -174,6 +213,9 @@
 
 <style>
   .panel { display: flex; flex-direction: column; gap: 26px; }
+  .tabs { display: flex; gap: 18px; border-bottom: 1px solid var(--line); }
+  .tabs button { border: none; background: none; border-radius: 0; padding: 8px 2px; color: var(--text-dim); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; font-size: 12px; }
+  .tabs button.active { color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
   section { display: flex; flex-direction: column; gap: 12px; }
   h3 { margin: 4px 0 0; font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; }
   .hint { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text-faint); margin-left: 6px; }

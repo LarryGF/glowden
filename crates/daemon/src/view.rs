@@ -34,6 +34,9 @@ pub struct DeviceView {
     /// Zone ids are USB key codes − 3 (from the driver file).
     #[serde(skip)]
     pub hid_usage_zones: bool,
+    /// Show only the first view of multi-view lighting pictures.
+    #[serde(skip)]
+    pub first_view: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -139,6 +142,7 @@ pub fn build(f: &mut Found, driver: Option<&crate::drivers::Driver>) -> DeviceVi
             })
             .unwrap_or_default(),
         hid_usage_zones: driver.is_some_and(|d| d.layout.zones.as_deref() == Some("hid-usage")),
+        first_view: driver.is_some_and(|d| d.layout.lighting_view.as_deref() == Some("first")),
     }
 }
 
@@ -211,7 +215,7 @@ fn image_size(bytes: &[u8]) -> Option<(u32, u32)> {
 
 /// Device picture plus LED shapes in its pixel space, from the imported G HUB metadata.
 /// Shape ids are zone ids, except on keyboards where they are HID usages.
-pub fn layout(model: &str, keyboard: bool) -> Option<serde_json::Value> {
+pub fn layout(model: &str, keyboard: bool, first_view: bool) -> Option<serde_json::Value> {
     use serde_json::{Value, json};
     let dir = std::path::PathBuf::from(std::env::var_os("HOME")?)
         .join(".local/share/lhub/devices")
@@ -269,6 +273,16 @@ pub fn layout(model: &str, keyboard: bool) -> Option<serde_json::Value> {
         "image/webp"
     };
 
+    // Multi-view lighting pictures list one bounds box per view; optionally show the first.
+    let crop = if first_view {
+        img["coordinate_transforms"]
+            .as_array()
+            .and_then(|t| t.first())
+            .map(|t| t["bounds"].clone())
+    } else {
+        None
+    };
+
     let mut shapes = Vec::new();
     for zone in img["zones"].as_array()? {
         for c in zone["components"].as_array().into_iter().flatten() {
@@ -289,6 +303,8 @@ pub fn layout(model: &str, keyboard: bool) -> Option<serde_json::Value> {
         "height": h,
         "image": format!("data:{mime};base64,{}", base64(&bytes)),
         "shapes": shapes,
-        "transforms": img.get("coordinate_transforms"),
+        // Keyboards light their legends; other devices tint the LED regions.
+        "legends": keyboard,
+        "crop": crop,
     }))
 }

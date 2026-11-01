@@ -31,6 +31,13 @@ pub enum Lighting {
     },
     /// Older configs: the G515 ripple before firmware effects came from driver files.
     Ripple { color: String },
+    /// Per-key painting: every zone gets `base` unless `keys` (zone id → color) says otherwise.
+    /// Sent once as a static frame.
+    Freestyle {
+        base: String,
+        #[serde(default)]
+        keys: BTreeMap<u8, String>,
+    },
     /// Host-rendered per-key effects: they need the service running.
     Wave { speed: u8 },
     Pulse {

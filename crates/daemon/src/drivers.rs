@@ -29,6 +29,8 @@ pub struct Layout {
     pub keys: Option<String>,
     /// "hid-usage" when zone ids are USB key codes − 3 (G515); zone ids are used as-is otherwise.
     pub zones: Option<String>,
+    /// "first" crops multi-view lighting pictures to their first view (Yeti GX front).
+    pub lighting_view: Option<String>,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]

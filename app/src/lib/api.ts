@@ -23,6 +23,7 @@ export type Lighting =
   | { effect: "cycle"; speed: number; intensity: number; saturation: number }
   | { effect: "firmware"; id: string; color: string; glow: number }
   | { effect: "ripple"; color: string }
+  | { effect: "freestyle"; base: string; keys: Record<string, string> }
   | { effect: "wave"; speed: number }
   | { effect: "pulse"; color: string; base: string; speed: number; width: number; fade: number; rainbow: boolean; glow: number; backdrop: number }
   | { effect: "starlight"; star: string; sky: string; density: number; glow: number; backdrop: number }
@@ -49,6 +50,10 @@ export interface Layout {
   width: number;
   height: number;
   image: string;
+  /** Keyboards: light only the bright legend pixels of the photo. */
+  legends: boolean;
+  /** Show only this region of the picture (first view of a multi-view lighting picture). */
+  crop: { x: number; y: number; width: number; height: number } | null;
   shapes: {
     zone: number;
     shape:

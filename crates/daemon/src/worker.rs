@@ -264,6 +264,18 @@ fn apply(
                     });
                 }
             }
+        } else if let Lighting::Freestyle { base, keys } = lighting {
+            *anim = None;
+            let zones = devices::perkey::zones(dev)?;
+            devices::perkey::begin(dev)?;
+            devices::perkey::fill(dev, &zones, parse_rgb(base)?)?;
+            let painted = keys
+                .iter()
+                .filter(|(z, _)| zones.contains(z))
+                .map(|(z, c)| Ok((*z, parse_rgb(c)?)))
+                .collect::<Result<Vec<_>, String>>()?;
+            devices::perkey::set_keys(dev, &painted)?;
+            devices::perkey::commit(dev)?;
         } else if let Lighting::Firmware { id, color, glow } = &normalize(lighting) {
             *anim = None;
             let fx = driver
@@ -403,6 +415,15 @@ fn record_device_lighting(
     };
     st.mode = "device";
     st.zones.clear();
+    if let Lighting::Freestyle { base, keys } = l {
+        let zones = devices::perkey::zones(&mut found.device).unwrap_or_default();
+        st.zones = zones
+            .into_iter()
+            .map(|z| (z, keys.get(&z).cloned().unwrap_or_else(|| base.clone())))
+            .collect();
+        st.effect = Some("freestyle".into());
+        return;
+    }
     if let Some(c) = color {
         let zones = devices::perkey::zones(&mut found.device).unwrap_or_else(|_| vec![1]);
         st.zones = zones.into_iter().map(|z| (z, hex(c))).collect();

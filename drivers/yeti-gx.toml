@@ -2,3 +2,7 @@ name = "Yeti GX"
 kind = "microphone"
 products = [0x0afc]
 ghub_model = "yeti_gx"
+
+[layout]
+# The lighting picture shows the front and the underside; show only the front.
+lighting_view = "first"

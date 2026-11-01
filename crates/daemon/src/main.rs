@@ -238,7 +238,8 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
             let v = st.workers.get(&id).map(|h| h.view.lock().unwrap().clone());
             Ok(json!(v.and_then(|v| view::layout(
                 v.model.as_deref()?,
-                v.hid_usage_zones
+                v.hid_usage_zones,
+                v.first_view
             ))))
         }
         Request::LightingState { id } => {
