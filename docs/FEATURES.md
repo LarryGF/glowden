@@ -25,7 +25,7 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | G HUB feature | Status | Notes |
 |---|---|---|
 | Fixed / breathing / color cycle (device effects) | done | Effect index looked up by id per device |
-| Brightness | done | Device + live effects |
+| Brightness | done | Scaled to each device's maximum; applied to live effects too |
 | Per-key painting (freestyle) | built | Library + CLI; no UI painter yet |
 | Animated host effects | done | Wave, starlight, pulse (live), visualizer |
 | Firmware reactive ripple (G515 `0x0017`) | done | Verified by user |
@@ -43,8 +43,9 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 
 | G HUB feature | Status | Notes |
 |---|---|---|
-| DPI levels, default, shift | next | `0x2201`; captures available |
-| DPI cycle up/down, report rate | next | `0x8060` |
+| DPI levels, default, shift | built | `0x2201` levels + active level in service and UI; shift not yet |
+| Report rate | done | `0x8060` read/write verified |
+| DPI cycle up/down via mouse buttons | planned | Host mode needs button spy `0x8110` |
 | Hi-res wheel / wheel mode | next | `0x2121` |
 | Button assignments | planned | Onboard profiles `0x8100` |
 | Onboard memory mode | planned | Read back before any write |
