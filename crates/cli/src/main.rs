@@ -133,6 +133,11 @@ fn device_command(query: &str, args: &[String]) -> CmdResult {
         ("mute", 1) => mic::set_muted(&mut dev, true)?,
         ("unmute", 1) => mic::set_muted(&mut dev, false)?,
         ("release", 1) => devices::release_lighting(&mut dev)?,
+        ("effects", 1) => {
+            for (index, id) in devices::cluster_effects(&mut dev, 0)? {
+                println!("{name}: cluster 0 effect {index} = id 0x{id:04x}");
+            }
+        }
         _ => return Err(USAGE.into()),
     }
     Ok(())

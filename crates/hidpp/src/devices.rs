@@ -50,13 +50,21 @@ pub fn release_lighting(dev: &mut Device) -> Result<()> {
     Ok(())
 }
 
+/// Index of the first effect on cluster 0 whose id is in `ids`.
+fn effect_index(dev: &mut Device, ids: &[u16]) -> Result<u8> {
+    let effects = cluster_effects(dev, 0)?;
+    ids.iter()
+        .find_map(|id| effects.iter().find(|(_, e)| e == id).map(|(i, _)| *i))
+        .ok_or(crate::Error::UnsupportedFeature(RGB_EFFECTS))
+}
+
 /// RGB effects (0x8071) function 1 on cluster 0. The trailing 0x01 makes the device keep it.
 pub fn set_effect(dev: &mut Device, effect: Effect) -> Result<()> {
     claim_lighting(dev)?;
     let mut p = [0u8; 13];
     match effect {
         Effect::Solid { rgb } => {
-            p[1] = 0;
+            p[1] = effect_index(dev, &[effect_id::FIXED])?;
             p[2..5].copy_from_slice(&rgb);
             p[5] = 0x02;
         }
@@ -65,7 +73,7 @@ pub fn set_effect(dev: &mut Device, effect: Effect) -> Result<()> {
             period_ms,
             intensity,
         } => {
-            p[1] = 1;
+            p[1] = effect_index(dev, &[effect_id::BREATHING])?;
             p[2..5].copy_from_slice(&rgb);
             p[5..7].copy_from_slice(&period_ms.to_be_bytes());
             p[8] = intensity;
@@ -75,7 +83,7 @@ pub fn set_effect(dev: &mut Device, effect: Effect) -> Result<()> {
             intensity,
             saturation,
         } => {
-            p[1] = 2;
+            p[1] = effect_index(dev, &[effect_id::CYCLE_ALT, effect_id::CYCLE])?;
             p[3] = saturation;
             p[8..10].copy_from_slice(&period_ms.to_be_bytes());
             p[10] = intensity;
@@ -116,4 +124,26 @@ pub mod mic {
 pub fn battery(dev: &mut Device) -> Result<(u8, bool)> {
     let r = dev.call(crate::features::UNIFIED_BATTERY, 1, &[])?;
     Ok((r[4], matches!(r[6], 1..=3)))
+}
+
+/// Effect ids from RGB effects function 0; the index of an effect differs per device.
+pub mod effect_id {
+    pub const OFF: u16 = 0x0000;
+    pub const FIXED: u16 = 0x0001;
+    pub const CYCLE: u16 = 0x0003;
+    pub const BREATHING: u16 = 0x000a;
+    pub const CYCLE_ALT: u16 = 0x0015;
+}
+
+/// (effect index, effect id) for every effect of `cluster`, from RGB effects function 0.
+/// Reply to [cluster, 0xff]: [cluster, _, location (2), effect count, ...];
+/// reply to [cluster, index]: [cluster, index, id (2), capabilities (2), period (2)].
+pub fn cluster_effects(dev: &mut Device, cluster: u8) -> Result<Vec<(u8, u16)>> {
+    let count = dev.call(RGB_EFFECTS, 0, &[cluster, 0xff, 0x00])?[8];
+    (0..count)
+        .map(|i| {
+            let r = dev.call(RGB_EFFECTS, 0, &[cluster, i, 0x00])?;
+            Ok((i, u16::from_be_bytes([r[6], r[7]])))
+        })
+        .collect()
 }
