@@ -1,0 +1,12 @@
+[package]
+name = "lhub-cli"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "lhub"
+path = "src/main.rs"
+
+[dependencies]
+hidpp = { path = "../hidpp" }
