@@ -4,7 +4,12 @@
   import DeviceVisual from "./DeviceVisual.svelte";
   import { freestyle } from "./freestyle.svelte";
 
-  let { device, live = true }: { device: Device; live?: boolean } = $props();
+  let {
+    device,
+    live = true,
+    compact = false,
+    size = 420,
+  }: { device: Device; live?: boolean; compact?: boolean; size?: number } = $props();
 
   let layout = $state<Layout | null>(null);
   let loaded = $state(false);
@@ -28,7 +33,7 @@
         draw();
       }).catch(() => {});
     poll();
-    timer = setInterval(poll, 100);
+    timer = setInterval(poll, compact ? 250 : 100);
   });
   onDestroy(() => clearInterval(timer));
 
@@ -64,14 +69,14 @@
 
   /** While painting, show strokes immediately instead of waiting for the device. */
   function color(zone: number): string {
-    if (freestyle.active) return freestyle.keys[String(zone)] ?? freestyle.base;
+    if (freestyle.active && !compact) return freestyle.keys[String(zone)] ?? freestyle.base;
     return state?.zones[String(zone)] ?? "#000000";
   }
 
   function draw() {
     if (!canvas || !layout || !photo || !mask || !layer) return;
     const ctx = canvas.getContext("2d")!;
-    const lit = live || freestyle.active;
+    const lit = live || (freestyle.active && !compact);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(photo, 0, 0, layout.width, layout.height);
 
@@ -127,15 +132,15 @@
   const animation = $derived(state?.mode === "device" ? state.effect : null);
 </script>
 
-<div class="stage {animation ?? ''}" class:painting={freestyle.active}>
+<div class="stage {animation ?? ''}" class:painting={freestyle.active && !compact} class:compact>
   {#if layout}
-    <canvas bind:this={canvas} width={layout.width} height={layout.height} onclick={paint}></canvas>
+    <canvas bind:this={canvas} width={layout.width} height={layout.height} onclick={compact ? undefined : paint}></canvas>
   {:else if loaded}
-    <div class="plain"><DeviceVisual {device} size={420} /></div>
-    {#if (live || freestyle.active) && zones.length}
+    <div class="plain"><DeviceVisual {device} {size} /></div>
+    {#if (live || (freestyle.active && !compact)) && zones.length}
       <div class="strip">
         {#each zones as z}
-          <button class="dot" style:background={color(z)} title="zone {z}" onclick={() => paintZone(z)} aria-label="zone {z}"></button>
+          <button class="dot" style:background={color(z)} title="zone {z}" onclick={compact ? undefined : () => paintZone(z)} aria-label="zone {z}"></button>
         {/each}
       </div>
     {/if}
@@ -154,4 +159,7 @@
   .strip { display: flex; gap: 12px; justify-content: center; }
   .dot { width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 1px solid var(--line); }
   .painting .dot { cursor: crosshair; }
+  .compact { gap: 12px; }
+  .compact canvas { max-height: 300px; filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.5)); }
+  .compact .dot { width: 14px; height: 14px; pointer-events: none; }
 </style>

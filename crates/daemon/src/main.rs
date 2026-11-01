@@ -328,40 +328,40 @@ fn ask(
 
 /// Copies a device's lighting to every other connected device that can show it. Firmware
 /// and freestyle effects are device-specific; live effects need per-key lighting.
+/// Copies lighting to every device that can show it. Device-specific effects (firmware
+/// effects, Freestyle) aren't synced, and devices running one keep it.
 fn sync_lighting(shared: &Shared, from: &str) -> Result<Value, String> {
     let (lighting, brightness, targets) = {
         let st = shared.0.lock().unwrap();
         let src = st.config.devices.get(from).cloned().unwrap_or_default();
         let lighting = src.lighting.ok_or("this device has no lighting set yet")?;
-        let targets: Vec<(String, String, bool)> = st
+        if !lighting.is_syncable() {
+            return Err("this effect is specific to this device and can't be synced".into());
+        }
+        let targets: Vec<(String, String)> = st
             .workers
             .iter()
             .filter(|(id, _)| id.as_str() != from)
-            .map(|(id, h)| {
-                let v = h.view.lock().unwrap();
-                (
-                    id.clone(),
-                    v.name.clone(),
-                    v.caps.contains(&"lighting"),
-                    v.caps.contains(&"per_key"),
-                )
+            .filter(|(id, _)| {
+                st.config
+                    .devices
+                    .get(id.as_str())
+                    .and_then(|c| c.lighting.as_ref())
+                    .is_none_or(Lighting::is_syncable)
             })
-            .filter(|(_, _, lit, _)| *lit)
-            .map(|(id, name, _, per_key)| (id, name, per_key))
+            .filter_map(|(id, h)| {
+                let v = h.view.lock().unwrap();
+                let shows = v.caps.contains(&"lighting")
+                    && (!lighting.is_host_rendered() || v.caps.contains(&"per_key"))
+                    && (!matches!(lighting, Lighting::Pulse { .. })
+                        || v.caps.contains(&"reactive"));
+                shows.then(|| (id.clone(), v.name.clone()))
+            })
             .collect();
         (lighting, src.brightness, targets)
     };
-    if matches!(
-        lighting,
-        Lighting::Firmware { .. } | Lighting::Ripple { .. } | Lighting::Freestyle { .. }
-    ) {
-        return Err("firmware and freestyle lighting are specific to one device".into());
-    }
     let mut synced = Vec::new();
-    for (id, name, per_key) in targets {
-        if lighting.is_host_rendered() && !per_key {
-            continue;
-        }
+    for (id, name) in targets {
         let l = lighting.clone();
         update(shared, &id, |c| {
             c.lighting = Some(l);

@@ -73,6 +73,14 @@ pub enum Lighting {
 }
 
 impl Lighting {
+    /// Firmware effects and Freestyle belong to one device and are left out of sync.
+    pub fn is_syncable(&self) -> bool {
+        !matches!(
+            self,
+            Lighting::Firmware { .. } | Lighting::Ripple { .. } | Lighting::Freestyle { .. }
+        )
+    }
+
     pub fn is_host_rendered(&self) -> bool {
         matches!(
             self,

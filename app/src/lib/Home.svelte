@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Device } from "./api";
   import DeviceVisual from "./DeviceVisual.svelte";
+  import LightingViewer from "./LightingViewer.svelte";
 
   let { devices, loading, onopen }: { devices: Device[]; loading: boolean; onopen: (d: Device) => void } = $props();
 </script>
@@ -20,7 +21,13 @@
               {#if d.battery}<span class:low={d.battery.percent <= 15}>{d.battery.percent}%{d.battery.charging ? " ⚡" : ""}{#if d.battery.hours && !d.battery.charging} · {Math.round(d.battery.hours)} h{/if}</span>{/if}
               <span>{d.connection === "LIGHTSPEED" ? "Wireless" : "USB"}</span>
             </div>
-            <div class="picture"><DeviceVisual device={d} size={d.kind === "keyboard" ? 520 : 230} /></div>
+            <div class="picture">
+              {#if d.caps.includes("lighting")}
+                <LightingViewer device={d} compact size={d.kind === "keyboard" ? 520 : 230} />
+              {:else}
+                <DeviceVisual device={d} size={d.kind === "keyboard" ? 520 : 230} />
+              {/if}
+            </div>
           </button>
         </div>
       {/each}

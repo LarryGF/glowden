@@ -226,10 +226,12 @@
 
   </div>
 
-  <div class="sync">
-    <button onclick={sync} disabled={!power}>Sync lighting to all devices</button>
-    {#if syncMessage}<span class="note">{syncMessage}</span>{/if}
-  </div>
+  {#if tab === "presets" && !effect.startsWith("fw:")}
+    <div class="sync">
+      <button onclick={sync} disabled={!power}>Sync lighting to all devices</button>
+      {#if syncMessage}<span class="note">{syncMessage}</span>{/if}
+    </div>
+  {/if}
 
   <p class="note">
     {tab === "freestyle"
