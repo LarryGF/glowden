@@ -80,3 +80,9 @@ pub mod mic {
         Ok(())
     }
 }
+
+/// Unified battery (0x1004) function 1: [state of charge %, level flags, charging status, ...].
+pub fn battery(dev: &mut Device) -> Result<(u8, bool)> {
+    let r = dev.call(crate::features::UNIFIED_BATTERY, 1, &[])?;
+    Ok((r[4], matches!(r[6], 1..=3)))
+}

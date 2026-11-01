@@ -1,7 +1,7 @@
 use std::process::ExitCode;
 
 use hidpp::devices::{self, Effect, mic};
-use hidpp::{Device, features};
+use hidpp::features;
 
 const USAGE: &str = "usage:
   lhub list                                  devices and their HID++ features
@@ -31,33 +31,13 @@ fn main() -> ExitCode {
 
 type CmdResult = Result<(), Box<dyn std::error::Error>>;
 
-/// Opens every node that answers HID++ 2.0, with its reported name. Nodes that don't answer
-/// directly may be receivers whose paired devices have no node of their own (e.g. headsets).
-fn open_all() -> Vec<(Device, String)> {
-    let mut out = Vec::new();
-    for info in hidpp::enumerate() {
-        let candidates = std::iter::once(None).chain((1..=6).map(Some));
-        for slot in candidates {
-            let opened = match slot {
-                None => Device::open(info.clone()),
-                Some(s) => Device::open_slot(info.clone(), s),
-            };
-            let Ok(mut dev) = opened else { break };
-            if dev.protocol().is_err() {
-                continue;
-            }
-            let name = dev.name().unwrap_or_else(|_| dev.info.kernel_name.clone());
-            out.push((dev, name));
-            if slot.is_none() {
-                break;
-            }
-        }
-    }
-    out
-}
-
 fn list() -> CmdResult {
-    for (mut dev, name) in open_all() {
+    for hidpp::discover::Found {
+        device: mut dev,
+        name,
+        ..
+    } in hidpp::discover::open_all()
+    {
         let (major, minor) = match dev.protocol() {
             Ok(v) => v,
             Err(e) => {
@@ -99,10 +79,15 @@ fn list() -> CmdResult {
 
 fn device_command(query: &str, args: &[String]) -> CmdResult {
     let q = query.to_lowercase();
-    let (mut dev, name) = open_all()
+    let hidpp::discover::Found {
+        device: mut dev,
+        name,
+        ..
+    } = hidpp::discover::open_all()
         .into_iter()
-        .find(|(_, n)| {
-            n.to_lowercase()
+        .find(|f| {
+            f.name
+                .to_lowercase()
                 .replace(' ', "")
                 .contains(&q.replace(' ', ""))
         })
