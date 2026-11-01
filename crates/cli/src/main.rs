@@ -10,6 +10,7 @@ const USAGE: &str = "usage:
   lhub <dev> cycle [period_ms] [intensity%] [saturation]
   lhub <dev> brightness <0-100>
   lhub <dev> release                         hand lighting/profiles back to the device
+  lhub <dev> animate wave|pulse|starlight    host-rendered per-key effect (Ctrl+C stops)
   lhub <dev> gain [0-100]                    microphones
   lhub <dev> mute | unmute
 <dev> is a case-insensitive part of the device name, e.g. yeti, g515, g502";
@@ -133,6 +134,7 @@ fn device_command(query: &str, args: &[String]) -> CmdResult {
         ("mute", 1) => mic::set_muted(&mut dev, true)?,
         ("unmute", 1) => mic::set_muted(&mut dev, false)?,
         ("release", 1) => devices::release_lighting(&mut dev)?,
+        ("animate", 2) => animate(&mut dev, &name, &args[1])?,
         ("zones", 1) => {
             let z = devices::perkey::zones(&mut dev)?;
             println!(
@@ -185,4 +187,47 @@ fn rgb(s: &str) -> Result<[u8; 3], String> {
         .filter(|_| s.len() == 6)
         .ok_or("color must be RRGGBB")?;
     Ok([(v >> 16) as u8, (v >> 8) as u8, v as u8])
+}
+
+fn animate(dev: &mut hidpp::Device, name: &str, which: &str) -> CmdResult {
+    use lighting::effects::{Pulse, Starlight, Wave};
+    use lighting::engine::{Effect, Press, Streamer};
+    use std::time::{Duration, Instant};
+
+    let mut effect: Box<dyn Effect> = match which {
+        "wave" => Box::new(Wave {
+            period: 4.0,
+            spread: 1.0,
+        }),
+        "pulse" => Box::new(Pulse::new([0x2d, 0xd4, 0xbf], [0x02, 0x06, 0x0c])),
+        "starlight" => Box::new(Starlight::new([0xff, 0xf2, 0xd0], [0x00, 0x03, 0x10])),
+        _ => return Err(USAGE.into()),
+    };
+    let short = name.split_whitespace().next().unwrap_or(name);
+    let nodes = lighting::input::find_event_nodes(short);
+    let presses_rx = lighting::input::watch(&nodes)?;
+    eprintln!("animating {which} on {name}; key input from {nodes:?}; Ctrl+C to stop");
+
+    let mut streamer = Streamer::new(dev, lighting::layout::iso_tkl_positions())?;
+    let mut presses: Vec<Press> = Vec::new();
+    let (mut frames, mut sent, mut since) = (0u32, 0usize, Instant::now());
+    loop {
+        let start = Instant::now();
+        presses.extend(presses_rx.try_iter());
+        presses.retain(|p| p.at.elapsed() < Duration::from_secs(3));
+        sent += streamer.frame(dev, effect.as_mut(), &presses)?;
+        frames += 1;
+        if since.elapsed() >= Duration::from_secs(5) {
+            let secs = since.elapsed().as_secs_f32();
+            eprintln!(
+                "{:.1} fps, {:.0} key updates/s",
+                frames as f32 / secs,
+                sent as f32 / secs
+            );
+            (frames, sent, since) = (0, 0, Instant::now());
+        }
+        if let Some(rest) = streamer.frame_interval.checked_sub(start.elapsed()) {
+            std::thread::sleep(rest);
+        }
+    }
 }

@@ -232,6 +232,16 @@ impl Device {
                 break;
             }
         }
+        // 0x08 = busy: the device is still digesting earlier messages (e.g. lighting frames).
+        let mut busy_retries = 0;
+        while matches!(last, Err(Error::Device(_, 0x08))) && busy_retries < 20 {
+            std::thread::sleep(Duration::from_millis(2 + busy_retries));
+            busy_retries += 1;
+            last = match self.bridge {
+                Some(bridge) => self.bridged_request(bridge, feature_index, function, params),
+                None => self.direct_request(feature_index, function, params),
+            };
+        }
         last
     }
 

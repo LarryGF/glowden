@@ -1,0 +1,8 @@
+[package]
+name = "lighting"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+hidpp = { path = "../hidpp" }
