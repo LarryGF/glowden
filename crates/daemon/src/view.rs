@@ -57,6 +57,10 @@ pub fn build(f: &mut Found) -> DeviceView {
     }
     if kind == "keyboard" {
         caps.push("reactive");
+        if devices::cluster_effects(dev, 0xff).is_ok_and(|l| l.iter().any(|(_, id)| *id == 0x0017))
+        {
+            caps.push("firmware_ripple");
+        }
     }
     if has(features::BRIGHTNESS) {
         caps.push("brightness");

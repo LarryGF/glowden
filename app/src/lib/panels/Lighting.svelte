@@ -15,9 +15,11 @@
         ? [
             { key: "wave", label: "Wave", host: true },
             { key: "starlight", label: "Starlight", host: true },
+            { key: "visualizer", label: "Audio visualizer", host: true },
           ]
         : []),
-      ...(device.caps.includes("reactive") ? [{ key: "pulse", label: "Pulse", host: true }] : []),
+      ...(device.caps.includes("firmware_ripple") ? [{ key: "ripple", label: "Ripple (onboard)", host: false }] : []),
+      ...(device.caps.includes("reactive") ? [{ key: "pulse", label: "Pulse (live)", host: true }] : []),
     ] as { key: Effect; label: string; host: boolean }[],
   );
 
@@ -32,6 +34,7 @@
   let fade = $state(40);
   let density = $state(30);
   let rainbow = $state(false);
+  let peak = $state("#ff3ea5");
   let brightness = $state(100);
   let loaded = $state(false);
 
@@ -49,6 +52,7 @@
         if ("saturation" in l) saturation = l.saturation;
         if (l.effect === "pulse") ({ base, width, fade, rainbow } = l);
         if (l.effect === "starlight") ({ star: color, sky: base, density } = l);
+        if (l.effect === "visualizer") ({ low: color, high: peak, background: base } = l);
       }
       if (cfg.brightness !== undefined) brightness = cfg.brightness;
     } catch (e) {
@@ -62,9 +66,11 @@
       case "fixed": return { effect, color };
       case "breathing": return { effect, color, speed, intensity };
       case "cycle": return { effect, speed, intensity, saturation };
+      case "ripple": return { effect, color };
       case "wave": return { effect, speed };
       case "pulse": return { effect, color, base, speed, width, fade, rainbow };
       case "starlight": return { effect, star: color, sky: base, density };
+      case "visualizer": return { effect, low: color, high: peak, background: base };
     }
   }
 
@@ -73,7 +79,7 @@
 
   const hostRendered = $derived(effects.find((e) => e.key === effect)?.host ?? false);
   const hasColor = $derived(effect !== "cycle" && effect !== "wave");
-  const hasSpeed = $derived(effect !== "fixed" && effect !== "starlight");
+  const hasSpeed = $derived(!["fixed", "starlight", "ripple", "visualizer"].includes(effect));
   const untested = $derived(device.kind === "mouse" && hostRendered);
 </script>
 
@@ -99,7 +105,7 @@
 
   {#if hasColor}
     <div class="row">
-      <span class="label">{effect === "starlight" ? "Star color" : effect === "pulse" ? "Pulse color" : "Color"}</span>
+      <span class="label">{effect === "starlight" ? "Star color" : effect === "pulse" ? "Pulse color" : effect === "visualizer" ? "Low color" : "Color"}</span>
       <div class="swatches">
         {#each swatches as s}
           <button class="swatch" class:active={color === s} style:background={s} aria-label={s} onclick={() => { color = s; push(); }}></button>
@@ -109,9 +115,16 @@
     </div>
   {/if}
 
-  {#if effect === "pulse" || effect === "starlight"}
+  {#if effect === "visualizer"}
     <label class="row inline">
-      <span class="label">{effect === "pulse" ? "Resting color" : "Sky color"}</span>
+      <span class="label">Peak color</span>
+      <input type="color" bind:value={peak} oninput={push} />
+    </label>
+  {/if}
+
+  {#if effect === "pulse" || effect === "starlight" || effect === "visualizer"}
+    <label class="row inline">
+      <span class="label">{effect === "pulse" ? "Resting color" : effect === "visualizer" ? "Background" : "Sky color"}</span>
       <input type="color" bind:value={base} oninput={push} />
     </label>
   {/if}
@@ -188,8 +201,9 @@
     animation: slide var(--p) linear infinite;
   }
   .preview.cycle { background-size: 1200% 100%; }
-  .preview.pulse { background: var(--b); }
-  .preview.pulse::after {
+  .preview.pulse, .preview.ripple { background: var(--b); }
+  .preview.visualizer { background: linear-gradient(0deg, var(--c), transparent 70%), var(--b); }
+  .preview.pulse::after, .preview.ripple::after {
     content: ""; position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px;
     border-radius: 50%; border: 3px solid var(--c); animation: ring 1.4s ease-out infinite;
   }

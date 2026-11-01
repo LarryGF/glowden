@@ -22,6 +22,8 @@ pub enum Lighting {
         intensity: u8,
         saturation: u8,
     },
+    /// Keyboard firmware ripple on key press (G515 effect 0x0017).
+    Ripple { color: String },
     /// Host-rendered per-key effects: they need the service running.
     Wave { speed: u8 },
     Pulse {
@@ -37,13 +39,21 @@ pub enum Lighting {
         sky: String,
         density: u8,
     },
+    Visualizer {
+        low: String,
+        high: String,
+        background: String,
+    },
 }
 
 impl Lighting {
     pub fn is_host_rendered(&self) -> bool {
         matches!(
             self,
-            Lighting::Wave { .. } | Lighting::Pulse { .. } | Lighting::Starlight { .. }
+            Lighting::Wave { .. }
+                | Lighting::Pulse { .. }
+                | Lighting::Starlight { .. }
+                | Lighting::Visualizer { .. }
         )
     }
 }

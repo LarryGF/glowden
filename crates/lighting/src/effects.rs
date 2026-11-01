@@ -30,6 +30,13 @@ fn scale(c: Rgb, k: f32) -> Rgb {
     ]
 }
 
+/// Blend from `a` toward `b` by `k` (0..1).
+pub fn mix(a: Rgb, b: Rgb, k: f32) -> Rgb {
+    let k = k.clamp(0.0, 1.0);
+    let ch = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * k).round() as u8;
+    [ch(a[0], b[0]), ch(a[1], b[1]), ch(a[2], b[2])]
+}
+
 fn add(a: Rgb, b: Rgb) -> Rgb {
     [
         a[0].saturating_add(b[0]),
@@ -120,7 +127,7 @@ impl Effect for Pulse {
                 } else {
                     self.color
                 };
-                out = add(out, scale(c, k));
+                out = mix(out, c, k);
             }
         }
         out
@@ -186,5 +193,47 @@ impl Effect for Starlight {
             }
         }
         add(scale(self.sky, 1.0 - k), scale(self.star, k))
+    }
+}
+
+/// Spectrum bars: the board's width is split into frequency bands (bass on the left) and
+/// each band lights its column from the bottom row up, blending `low` → `high` with height.
+pub struct Visualizer {
+    pub low: Rgb,
+    pub high: Rgb,
+    pub background: Rgb,
+    meter: crate::audio::AudioMeter,
+    levels: Vec<f32>,
+}
+
+impl Visualizer {
+    pub fn new(low: Rgb, high: Rgb, background: Rgb) -> std::io::Result<Self> {
+        let meter = crate::audio::AudioMeter::start(16)?;
+        Ok(Visualizer {
+            low,
+            high,
+            background,
+            meter,
+            levels: vec![0.0; 16],
+        })
+    }
+}
+
+impl Effect for Visualizer {
+    fn begin_frame(&mut self, _t: f32) {
+        self.levels.clone_from(&self.meter.bands.lock().unwrap());
+    }
+
+    fn color(&mut self, key: &Key, _t: f32, _: &[Press], _: Instant) -> Rgb {
+        let (w, h) = crate::layout::SIZE;
+        let band = ((key.x / w) * self.levels.len() as f32) as usize;
+        let level = self.levels[band.min(self.levels.len() - 1)];
+        // Height of this key from the bottom edge, 0 (bottom row) .. 1 (top row).
+        let height = 1.0 - key.y / h;
+        if level > height {
+            mix(self.low, self.high, height)
+        } else {
+            self.background
+        }
     }
 }

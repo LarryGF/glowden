@@ -19,6 +19,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("list") => list(),
+        Some("audio-levels") => audio_levels(),
         Some(dev) if args.len() >= 2 => device_command(dev, &args[1..]),
         _ => Err(USAGE.into()),
     };
@@ -134,6 +135,21 @@ fn device_command(query: &str, args: &[String]) -> CmdResult {
         ("mute", 1) => mic::set_muted(&mut dev, true)?,
         ("unmute", 1) => mic::set_muted(&mut dev, false)?,
         ("release", 1) => devices::release_lighting(&mut dev)?,
+        ("raw-effect", 4) => {
+            // Experiments: cluster, effect index, up to 10 hex parameter bytes.
+            let cluster = u8::from_str_radix(&args[1], 16)?;
+            let index = u8::from_str_radix(&args[2], 16)?;
+            let bytes: Vec<u8> = (0..args[3].len() / 2)
+                .map(|i| u8::from_str_radix(&args[3][i * 2..i * 2 + 2], 16))
+                .collect::<Result<_, _>>()?;
+            let mut p = [0u8; 13];
+            p[0] = cluster;
+            p[1] = index;
+            p[2..2 + bytes.len().min(10)].copy_from_slice(&bytes[..bytes.len().min(10)]);
+            p[12] = 0x01;
+            devices::claim_lighting(&mut dev)?;
+            dev.call(hidpp::features::RGB_EFFECTS, 1, &p)?;
+        }
         ("animate", 2) => animate(&mut dev, &name, &args[1])?,
         ("zones", 1) => {
             let z = devices::perkey::zones(&mut dev)?;
@@ -230,4 +246,21 @@ fn animate(dev: &mut hidpp::Device, name: &str, which: &str) -> CmdResult {
             std::thread::sleep(rest);
         }
     }
+}
+
+/// Prints the visualizer's band levels for a few seconds (checks audio capture).
+fn audio_levels() -> CmdResult {
+    let meter = lighting::audio::AudioMeter::start(16)?;
+    for _ in 0..12 {
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        let bars: String = meter
+            .bands
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|v| [' ', '.', ':', '-', '=', '+', '*', '#', '@'][(v * 8.0).round() as usize])
+            .collect();
+        println!("[{bars}]");
+    }
+    Ok(())
 }

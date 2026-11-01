@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use hidpp::devices::{self, Effect as DeviceEffect, mic};
 use hidpp::discover::Found;
-use lighting::effects::{Pulse, Starlight, Wave};
+use lighting::effects::{Pulse, Starlight, Visualizer, Wave};
 use lighting::engine::{Effect, Press, Streamer};
 use serde_json::{Value, json};
 
@@ -203,15 +203,21 @@ fn apply(
                     });
                 }
             }
+        } else if let Lighting::Ripple { color } = lighting {
+            *anim = None;
+            devices::set_firmware_reactive(dev, parse_rgb(color)?)?;
         } else {
             *anim = None;
             devices::set_effect(dev, native_effect(lighting)?)?;
         }
     }
-    if let Some(b) = cfg.brightness
-        && dev.feature(hidpp::features::BRIGHTNESS).is_ok()
-    {
-        devices::set_brightness(dev, b)?;
+    if let Some(b) = cfg.brightness {
+        if let Some(a) = anim.as_mut() {
+            a.streamer.brightness = b.min(100) as f32 / 100.0;
+        }
+        if dev.feature(hidpp::features::BRIGHTNESS).is_ok() {
+            devices::set_brightness(dev, b)?;
+        }
     }
     Ok(())
 }
@@ -269,6 +275,14 @@ fn host_effect(l: &Lighting) -> Result<Box<dyn Effect>, String> {
             s.density = lerp(*density, 1.0, 40.0);
             Box::new(s)
         }
+        Lighting::Visualizer {
+            low,
+            high,
+            background,
+        } => Box::new(
+            Visualizer::new(parse_rgb(low)?, parse_rgb(high)?, parse_rgb(background)?)
+                .map_err(|e| format!("audio capture (pw-record): {e}"))?,
+        ),
         _ => unreachable!("device-native effect"),
     })
 }

@@ -18,9 +18,11 @@ export type Lighting =
   | { effect: "fixed"; color: string }
   | { effect: "breathing"; color: string; speed: number; intensity: number }
   | { effect: "cycle"; speed: number; intensity: number; saturation: number }
+  | { effect: "ripple"; color: string }
   | { effect: "wave"; speed: number }
   | { effect: "pulse"; color: string; base: string; speed: number; width: number; fade: number; rainbow: boolean }
-  | { effect: "starlight"; star: string; sky: string; density: number };
+  | { effect: "starlight"; star: string; sky: string; density: number }
+  | { effect: "visualizer"; low: string; high: string; background: string };
 
 export interface DeviceConfig {
   lighting?: Lighting;

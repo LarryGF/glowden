@@ -33,6 +33,9 @@ pub struct Streamer {
     shown: HashMap<u8, Rgb>,
     started: Instant,
     pub frame_interval: Duration,
+    /// 0..1 scale applied to every rendered color; device brightness doesn't affect
+    /// host-painted frames.
+    pub brightness: f32,
 }
 
 impl Streamer {
@@ -52,6 +55,7 @@ impl Streamer {
             shown: zones.into_iter().map(|z| (z, [0, 0, 0])).collect(),
             started: Instant::now(),
             frame_interval: Duration::from_millis(40),
+            brightness: 1.0,
         })
     }
 
@@ -69,6 +73,11 @@ impl Streamer {
         let mut changed: Vec<(u8, Rgb)> = Vec::new();
         for key in &self.keys {
             let c = effect.color(key, t, presses, now);
+            let c = if self.brightness < 1.0 {
+                c.map(|v| (v as f32 * self.brightness).round() as u8)
+            } else {
+                c
+            };
             if self.shown.get(&key.zone) != Some(&c) {
                 changed.push((key.zone, c));
             }

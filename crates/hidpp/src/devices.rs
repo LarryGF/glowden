@@ -244,3 +244,23 @@ pub mod perkey {
         Ok(())
     }
 }
+
+/// Firmware reactive effect on the all-zones address (id 0x0017 on the G515): keys light
+/// up and ripple outward when pressed, with no host involvement. Parameter layout from
+/// G HUB captures: [r, g, b, 0xff, 0x01, 0x00, 0x00, 0x14]; only the color is known to vary.
+pub fn set_firmware_reactive(dev: &mut Device, rgb: [u8; 3]) -> Result<()> {
+    claim_lighting(dev)?;
+    let index = cluster_effects(dev, 0xff)?
+        .into_iter()
+        .find(|(_, id)| *id == 0x0017)
+        .map(|(i, _)| i)
+        .ok_or(crate::Error::UnsupportedFeature(RGB_EFFECTS))?;
+    let mut p = [0u8; 13];
+    p[0] = 0xff;
+    p[1] = index;
+    p[2..5].copy_from_slice(&rgb);
+    p[5..10].copy_from_slice(&[0xff, 0x01, 0x00, 0x00, 0x14]);
+    p[12] = 0x01;
+    dev.call(RGB_EFFECTS, 1, &p)?;
+    Ok(())
+}
