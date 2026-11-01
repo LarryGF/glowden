@@ -36,8 +36,16 @@ fn found(mut device: Device, id: String) -> Found {
 /// Every device that answers HID++ 2.0. Nodes that don't answer directly may be
 /// receivers whose paired devices have no node of their own.
 pub fn open_all() -> Vec<Found> {
+    scan_except(&|_| false)
+}
+
+/// Like `open_all`, but leaves alone nodes whose id `known` says are already handled.
+pub fn scan_except(known: &dyn Fn(&str) -> bool) -> Vec<Found> {
     let mut out = Vec::new();
     for info in enumerate() {
+        if known(&node_id(&info)) {
+            continue;
+        }
         if let Some(dev) = try_open(&info, None) {
             out.push(found(dev, node_id(&info)));
             continue;
@@ -46,6 +54,9 @@ pub fn open_all() -> Vec<Found> {
             continue; // a per-device node already; receiver slots don't apply
         }
         for slot in 1..=6 {
+            if known(&format!("{}@{slot}", node_id(&info))) {
+                continue;
+            }
             if let Some(dev) = try_open(&info, Some(slot)) {
                 out.push(found(dev, format!("{}@{slot}", node_id(&info))));
             }

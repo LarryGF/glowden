@@ -1651,8 +1651,7 @@ dependencies = [
 name = "lhub-app"
 version = "0.1.0"
 dependencies = [
- "hidpp",
- "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
 ]
@@ -1663,6 +1662,16 @@ version = "0.1.0"
 dependencies = [
  "hidpp",
  "lighting",
+]
+
+[[package]]
+name = "lhubd"
+version = "0.1.0"
+dependencies = [
+ "hidpp",
+ "lighting",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

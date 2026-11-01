@@ -1,0 +1,209 @@
+//! lhubd: owns the devices, keeps their configuration applied, and serves the UI over a
+//! Unix socket with one JSON request/response per line.
+
+mod config;
+mod view;
+mod worker;
+
+use std::collections::HashMap;
+use std::io::{BufRead, BufReader, Write};
+use std::os::unix::net::{UnixListener, UnixStream};
+use std::path::PathBuf;
+use std::sync::atomic::Ordering;
+use std::sync::mpsc;
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::Duration;
+
+use serde::Deserialize;
+use serde_json::{Value, json};
+
+use config::{Config, DeviceConfig, Lighting};
+use worker::{Cmd, Handle};
+
+struct State {
+    config: Config,
+    workers: HashMap<String, Handle>,
+    scanned: bool,
+}
+
+type Shared = Arc<(Mutex<State>, Condvar)>;
+
+pub fn socket_path() -> PathBuf {
+    let dir = std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/tmp"));
+    dir.join("lhub.sock")
+}
+
+fn main() {
+    let path = socket_path();
+    if UnixStream::connect(&path).is_ok() {
+        eprintln!("lhubd already running on {}", path.display());
+        return;
+    }
+    let _ = std::fs::remove_file(&path);
+    let listener =
+        UnixListener::bind(&path).unwrap_or_else(|e| panic!("bind {}: {e}", path.display()));
+    eprintln!("lhubd listening on {}", path.display());
+
+    let shared: Shared = Arc::new((
+        Mutex::new(State {
+            config: Config::load(),
+            workers: HashMap::new(),
+            scanned: false,
+        }),
+        Condvar::new(),
+    ));
+
+    let manager = shared.clone();
+    std::thread::spawn(move || manage(manager));
+
+    for stream in listener.incoming().flatten() {
+        let shared = shared.clone();
+        std::thread::spawn(move || serve(stream, shared));
+    }
+}
+
+/// Picks up new and reconnected devices and hands each its saved configuration.
+fn manage(shared: Shared) {
+    loop {
+        {
+            let mut st = shared.0.lock().unwrap();
+            st.workers.retain(|id, h| {
+                let alive = h.alive.load(Ordering::Relaxed);
+                if !alive {
+                    eprintln!("{id}: gone");
+                }
+                alive
+            });
+        }
+        let known: Vec<String> = shared.0.lock().unwrap().workers.keys().cloned().collect();
+        let found = hidpp::discover::scan_except(&|id| known.iter().any(|k| k == id));
+        {
+            let mut st = shared.0.lock().unwrap();
+            for f in found {
+                let cfg = st.config.devices.get(&f.id).cloned().unwrap_or_default();
+                eprintln!("{}: {} connected, applying {:?}", f.id, f.name, cfg);
+                let id = f.id.clone();
+                st.workers.insert(id, worker::spawn(f, cfg));
+            }
+            st.scanned = true;
+        }
+        shared.1.notify_all();
+        std::thread::sleep(Duration::from_secs(3));
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "cmd", rename_all = "snake_case")]
+enum Request {
+    List,
+    GetConfig { id: String },
+    SetLighting { id: String, lighting: Lighting },
+    SetBrightness { id: String, percent: u8 },
+    Release { id: String },
+    GetGain { id: String },
+    SetGain { id: String, gain: u8 },
+    SetMuted { id: String, muted: bool },
+}
+
+fn serve(stream: UnixStream, shared: Shared) {
+    let mut out = match stream.try_clone() {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    for line in BufReader::new(stream).lines() {
+        let Ok(line) = line else { return };
+        let response = match serde_json::from_str::<Request>(&line) {
+            Ok(req) => match handle(req, &shared) {
+                Ok(data) => json!({ "ok": true, "data": data }),
+                Err(e) => json!({ "ok": false, "error": e }),
+            },
+            Err(e) => json!({ "ok": false, "error": format!("bad request: {e}") }),
+        };
+        if writeln!(out, "{response}").is_err() {
+            return;
+        }
+    }
+}
+
+fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
+    let (lock, cvar) = &**shared;
+    match req {
+        Request::List => {
+            let st = cvar
+                .wait_timeout_while(lock.lock().unwrap(), Duration::from_secs(8), |s| !s.scanned)
+                .unwrap()
+                .0;
+            let mut views: Vec<_> = st
+                .workers
+                .values()
+                .map(|h| h.view.lock().unwrap().clone())
+                .collect();
+            views.sort_by(|a, b| a.kind.cmp(b.kind).then(a.name.cmp(&b.name)));
+            Ok(json!(views))
+        }
+        Request::GetConfig { id } => {
+            let st = lock.lock().unwrap();
+            Ok(json!(
+                st.config.devices.get(&id).cloned().unwrap_or_default()
+            ))
+        }
+        Request::SetLighting { id, lighting } => {
+            update(shared, &id, |c| c.lighting = Some(lighting))
+        }
+        Request::SetBrightness { id, percent } => {
+            update(shared, &id, |c| c.brightness = Some(percent.min(100)))
+        }
+        Request::Release { id } => {
+            {
+                let mut st = lock.lock().unwrap();
+                if let Some(c) = st.config.devices.get_mut(&id) {
+                    c.lighting = None;
+                }
+                st.config.save();
+            }
+            ask(shared, &id, Cmd::Release)
+        }
+        Request::GetGain { id } => ask(shared, &id, Cmd::GetGain),
+        Request::SetGain { id, gain } => ask(shared, &id, |tx| Cmd::SetGain(gain, tx)),
+        Request::SetMuted { id, muted } => ask(shared, &id, |tx| Cmd::SetMuted(muted, tx)),
+    }
+}
+
+/// Changes a device's saved configuration and applies it if the device is connected.
+fn update(
+    shared: &Shared,
+    id: &str,
+    change: impl FnOnce(&mut DeviceConfig),
+) -> Result<Value, String> {
+    let mut st = shared.0.lock().unwrap();
+    let cfg = st.config.devices.entry(id.to_string()).or_default();
+    change(cfg);
+    let cfg = cfg.clone();
+    st.config.save();
+    if let Some(h) = st.workers.get(id) {
+        let _ = h.tx.send(Cmd::Apply(cfg));
+    }
+    Ok(Value::Null)
+}
+
+/// Sends a command to a device's worker and waits for its answer.
+fn ask(
+    shared: &Shared,
+    id: &str,
+    make: impl FnOnce(worker::Reply) -> Cmd,
+) -> Result<Value, String> {
+    let (tx, rx) = mpsc::channel();
+    {
+        let st = shared.0.lock().unwrap();
+        let h = st
+            .workers
+            .get(id)
+            .ok_or_else(|| format!("device {id} is not connected"))?;
+        h.tx.send(make(tx))
+            .map_err(|_| format!("device {id} is not connected"))?;
+    }
+    rx.recv_timeout(Duration::from_secs(5))
+        .map_err(|_| format!("device {id} did not respond"))?
+}

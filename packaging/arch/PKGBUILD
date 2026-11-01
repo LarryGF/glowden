@@ -14,12 +14,14 @@ build() {
   pnpm install --frozen-lockfile
   pnpm tauri build
   cd ..
-  cargo build --release -p lhub-cli
+  cargo build --release -p lhub-cli -p lhubd
 }
 
 package() {
   local root="$startdir/../.."
   install -Dm755 "$root/target/release/lhub-app" "$pkgdir/usr/bin/lhub-app"
   install -Dm755 "$root/target/release/lhub" "$pkgdir/usr/bin/lhub"
+  install -Dm755 "$root/target/release/lhubd" "$pkgdir/usr/bin/lhubd"
   install -Dm644 "$root/packaging/udev/70-lhub.rules" "$pkgdir/usr/lib/udev/rules.d/70-lhub.rules"
+  install -Dm644 "$root/packaging/systemd/lhubd.service" "$pkgdir/usr/lib/systemd/user/lhubd.service"
 }

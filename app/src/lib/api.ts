@@ -13,18 +13,31 @@ export interface Device {
   features: { id: string; name: string; version: number }[];
 }
 
-export type Effect =
-  | { kind: "solid"; color: string }
-  | { kind: "breathe"; color: string; period_ms: number; intensity: number }
-  | { kind: "cycle"; period_ms: number; intensity: number; saturation: number };
+/** Mirrors lhubd's config: speeds and sizes are 1..100 sliders. */
+export type Lighting =
+  | { effect: "fixed"; color: string }
+  | { effect: "breathing"; color: string; speed: number; intensity: number }
+  | { effect: "cycle"; speed: number; intensity: number; saturation: number }
+  | { effect: "wave"; speed: number }
+  | { effect: "pulse"; color: string; base: string; speed: number; width: number; fade: number; rainbow: boolean }
+  | { effect: "starlight"; star: string; sky: string; density: number };
+
+export interface DeviceConfig {
+  lighting?: Lighting;
+  brightness?: number;
+}
+
+const request = <T>(req: Record<string, unknown>) => invoke<T>("request", { req });
 
 export const api = {
-  listDevices: () => invoke<Device[]>("list_devices"),
-  setEffect: (id: string, effect: Effect) => invoke<void>("set_effect", { id, effect }),
-  setBrightness: (id: string, percent: number) => invoke<void>("set_brightness", { id, percent }),
-  getGain: (id: string) => invoke<number>("get_gain", { id }),
-  setGain: (id: string, gain: number) => invoke<void>("set_gain", { id, gain }),
-  setMuted: (id: string, muted: boolean) => invoke<void>("set_muted", { id, muted }),
+  listDevices: () => request<Device[]>({ cmd: "list" }),
+  getConfig: (id: string) => request<DeviceConfig>({ cmd: "get_config", id }),
+  setLighting: (id: string, lighting: Lighting) => request<void>({ cmd: "set_lighting", id, lighting }),
+  setBrightness: (id: string, percent: number) => request<void>({ cmd: "set_brightness", id, percent }),
+  release: (id: string) => request<void>({ cmd: "release", id }),
+  getGain: (id: string) => request<number>({ cmd: "get_gain", id }),
+  setGain: (id: string, gain: number) => request<void>({ cmd: "set_gain", id, gain }),
+  setMuted: (id: string, muted: boolean) => request<void>({ cmd: "set_muted", id, muted }),
 };
 
 /** Runs `fn` once input has been idle for `ms`, so sliders don't flood the device. */
