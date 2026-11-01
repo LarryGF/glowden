@@ -35,12 +35,27 @@ pub fn socket_path() -> PathBuf {
     dir.join("lhub.sock")
 }
 
+/// Holds an exclusive lock for the life of the process, so two services started at the
+/// same moment (e.g. by the app and by systemd) can't both claim the socket.
+fn single_instance() -> Option<std::fs::File> {
+    use std::os::fd::AsRawFd;
+    let lock = socket_path().with_extension("lock");
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(lock)
+        .ok()?;
+    let ok = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0;
+    ok.then_some(file)
+}
+
 fn main() {
     let path = socket_path();
-    if UnixStream::connect(&path).is_ok() {
-        eprintln!("lhubd already running on {}", path.display());
+    let Some(_lock) = single_instance() else {
+        eprintln!("lhubd already running ({})", path.display());
         return;
-    }
+    };
     let _ = std::fs::remove_file(&path);
     let listener =
         UnixListener::bind(&path).unwrap_or_else(|e| panic!("bind {}: {e}", path.display()));
@@ -66,6 +81,9 @@ fn main() {
 
 /// Picks up new and reconnected devices and hands each its saved configuration.
 fn manage(shared: Shared) {
+    // Nodes that didn't answer, and when; they're only re-probed every 30 s so a switched-off
+    // headset doesn't slow down noticing everything else.
+    let mut silent: HashMap<String, std::time::Instant> = HashMap::new();
     loop {
         {
             let mut st = shared.0.lock().unwrap();
@@ -78,17 +96,20 @@ fn manage(shared: Shared) {
             });
         }
         let known: Vec<String> = shared.0.lock().unwrap().workers.keys().cloned().collect();
-        let found = hidpp::discover::scan_except(&|id| known.iter().any(|k| k == id));
-        {
+        silent.retain(|_, at| at.elapsed() < Duration::from_secs(30));
+        let skip = |id: &str| known.iter().any(|k| k == id) || silent.contains_key(id);
+        let quiet = hidpp::discover::scan_each(&skip, &mut |f| {
             let mut st = shared.0.lock().unwrap();
-            for f in found {
-                let cfg = st.config.devices.get(&f.id).cloned().unwrap_or_default();
-                eprintln!("{}: {} connected, applying {:?}", f.id, f.name, cfg);
-                let id = f.id.clone();
-                st.workers.insert(id, worker::spawn(f, cfg));
-            }
-            st.scanned = true;
-        }
+            let cfg = st.config.devices.get(&f.id).cloned().unwrap_or_default();
+            eprintln!("{}: {} connected, applying {:?}", f.id, f.name, cfg);
+            let id = f.id.clone();
+            st.workers.insert(id, worker::spawn(f, cfg));
+            drop(st);
+            shared.1.notify_all();
+        });
+        let now = std::time::Instant::now();
+        silent.extend(quiet.into_iter().map(|id| (id, now)));
+        shared.0.lock().unwrap().scanned = true;
         shared.1.notify_all();
         std::thread::sleep(Duration::from_secs(3));
     }
@@ -98,13 +119,43 @@ fn manage(shared: Shared) {
 #[serde(tag = "cmd", rename_all = "snake_case")]
 enum Request {
     List,
-    GetConfig { id: String },
-    SetLighting { id: String, lighting: Lighting },
-    SetBrightness { id: String, percent: u8 },
-    Release { id: String },
-    GetGain { id: String },
-    SetGain { id: String, gain: u8 },
-    SetMuted { id: String, muted: bool },
+    GetConfig {
+        id: String,
+    },
+    SetLighting {
+        id: String,
+        lighting: Lighting,
+    },
+    SetBrightness {
+        id: String,
+        percent: u8,
+    },
+    Release {
+        id: String,
+    },
+    GetGain {
+        id: String,
+    },
+    SetGain {
+        id: String,
+        gain: u8,
+    },
+    SetMuted {
+        id: String,
+        muted: bool,
+    },
+    MouseInfo {
+        id: String,
+    },
+    SetDpi {
+        id: String,
+        levels: Vec<u16>,
+        level: usize,
+    },
+    SetReportInterval {
+        id: String,
+        ms: u8,
+    },
 }
 
 fn serve(stream: UnixStream, shared: Shared) {
@@ -168,6 +219,19 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
         Request::GetGain { id } => ask(shared, &id, Cmd::GetGain),
         Request::SetGain { id, gain } => ask(shared, &id, |tx| Cmd::SetGain(gain, tx)),
         Request::SetMuted { id, muted } => ask(shared, &id, |tx| Cmd::SetMuted(muted, tx)),
+        Request::MouseInfo { id } => ask(shared, &id, Cmd::MouseInfo),
+        Request::SetDpi { id, levels, level } => {
+            if levels.is_empty() || levels.len() > 5 || level >= levels.len() {
+                return Err("need 1-5 DPI levels and a valid active level".into());
+            }
+            update(shared, &id, |c| {
+                c.dpi_levels = levels;
+                c.dpi_level = Some(level);
+            })
+        }
+        Request::SetReportInterval { id, ms } => {
+            update(shared, &id, |c| c.report_interval = Some(ms))
+        }
     }
 }
 

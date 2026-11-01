@@ -28,9 +28,11 @@ fn connect() -> Result<UnixStream, String> {
     if let Ok(s) = UnixStream::connect(socket_path()) {
         return Ok(s);
     }
-    std::process::Command::new(daemon_binary())
+    let mut child = std::process::Command::new(daemon_binary())
         .spawn()
         .map_err(|e| format!("cannot start lhubd: {e}"))?;
+    // Reap the service if it exits while the app is open, so it doesn't linger as a zombie.
+    std::thread::spawn(move || child.wait());
     let deadline = Instant::now() + Duration::from_secs(5);
     while Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(100));

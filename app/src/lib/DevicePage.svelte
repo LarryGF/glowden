@@ -5,6 +5,7 @@
   import Lighting from "./panels/Lighting.svelte";
   import Microphone from "./panels/Microphone.svelte";
   import Planned from "./panels/Planned.svelte";
+  import Sensitivity from "./panels/Sensitivity.svelte";
 
   let { device, onerror }: { device: Device; onerror: (e: unknown) => void } = $props();
 
@@ -23,7 +24,7 @@
       ? [{ key: "logivoice", label: "Mic processing", planned: "The headset runs noise reduction, gate, compressor, de-esser and EQ on-device (features 0x0900–0x0908)." }]
       : []),
     ...(device.caps.includes("sidetone") ? [{ key: "sidetone", label: "Sidetone", planned: "Feature 0x0604, coming with the G522 work." }] : []),
-    ...(device.caps.includes("dpi") ? [{ key: "dpi", label: "Sensitivity", planned: "DPI levels and report rate, coming with the G502 work." }] : []),
+    ...(device.caps.includes("dpi") ? [{ key: "dpi", label: "Sensitivity" }] : []),
     ...(device.caps.includes("assignments")
       ? [{ key: "assign", label: "Assignments", planned: "Button and key remapping, coming with the keyboard and mouse work." }]
       : []),
@@ -62,6 +63,8 @@
         <Lighting {device} {onerror} />
       {:else if active === "mic"}
         <Microphone {device} {onerror} />
+      {:else if active === "dpi"}
+        <Sensitivity {device} {onerror} />
       {:else if active === "info"}
         <Info {device} />
       {/if}

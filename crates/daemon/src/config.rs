@@ -64,6 +64,14 @@ pub struct DeviceConfig {
     pub lighting: Option<Lighting>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub brightness: Option<u8>,
+    /// Mouse DPI presets (G HUB allows up to 5) and which one is active.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dpi_levels: Vec<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dpi_level: Option<usize>,
+    /// Report interval in ms (1 = 1000 Hz).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub report_interval: Option<u8>,
 }
 
 #[derive(Serialize, Deserialize, Default)]

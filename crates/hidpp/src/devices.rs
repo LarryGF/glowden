@@ -94,12 +94,18 @@ pub fn set_effect(dev: &mut Device, effect: Effect) -> Result<()> {
     Ok(())
 }
 
-/// Brightness (0x8040): function 2 sets the level, function 4 with 1 is always sent after it by G HUB.
+/// Brightness (0x8040): function 0 reports the maximum level (0xff on the Yeti GX, 100 on
+/// the G515), function 2 sets the level, and on v1 G HUB follows with function 4 = 1.
 pub fn set_brightness(dev: &mut Device, percent: u8) -> Result<()> {
-    let level = (percent.min(100) as u16 * 255 / 100) as u8;
-    dev.call(BRIGHTNESS, 2, &[0x00, level])?;
-    dev.call(BRIGHTNESS, 4, &[0x01])?;
-    Ok(())
+    let info = dev.call(BRIGHTNESS, 0, &[])?;
+    let max = u16::from_be_bytes([info[4], info[5]]).max(1);
+    let level = (percent.min(100) as u32 * max as u32 / 100) as u16;
+    dev.call(BRIGHTNESS, 2, &level.to_be_bytes())?;
+    // Function 4 only exists from v1 (Yeti GX); the G515's v0 answers "invalid function".
+    match dev.call(BRIGHTNESS, 4, &[0x01]) {
+        Err(crate::Error::Device(_, 0x07)) => Ok(()),
+        r => r.map(|_| ()),
+    }
 }
 
 pub mod mic {
@@ -263,4 +269,64 @@ pub fn set_firmware_reactive(dev: &mut Device, rgb: [u8; 3]) -> Result<()> {
     p[12] = 0x01;
     dev.call(RGB_EFFECTS, 1, &p)?;
     Ok(())
+}
+
+/// Mouse sensor and report rate, decoded from G HUB captures of the G502 X PLUS.
+pub mod mouse {
+    use crate::features::ADJUSTABLE_DPI;
+    use crate::{Device, Result};
+
+    pub const REPORT_RATE: u16 = 0x8060;
+
+    /// Current DPI of sensor 0 (function 2 → [sensor, dpi_hi, dpi_lo, default_hi, default_lo]).
+    pub fn dpi(dev: &mut Device) -> Result<u16> {
+        let r = dev.call(ADJUSTABLE_DPI, 2, &[0x00])?;
+        Ok(u16::from_be_bytes([r[5], r[6]]))
+    }
+
+    /// Supported DPI values (function 1). The list holds plain values and ranges written as
+    /// `low, 0xe000 | step, high`.
+    pub fn dpi_range(dev: &mut Device) -> Result<Vec<u16>> {
+        let mut words = Vec::new();
+        for page in 0..4u8 {
+            let r = dev.call(ADJUSTABLE_DPI, 1, &[0x00, page])?;
+            let chunk: Vec<u16> = r[5..20]
+                .chunks_exact(2)
+                .map(|c| u16::from_be_bytes([c[0], c[1]]))
+                .collect();
+            let end = chunk.iter().position(|&w| w == 0);
+            words.extend_from_slice(&chunk[..end.unwrap_or(chunk.len())]);
+            if end.is_some() {
+                break;
+            }
+        }
+        Ok(words)
+    }
+
+    /// Sets sensor 0 to `dpi`. `level` is the DPI slot G HUB reports alongside (1-based;
+    /// the mouse uses it for its DPI indicator).
+    pub fn set_dpi(dev: &mut Device, dpi: u16, level: u8) -> Result<()> {
+        let [hi, lo] = dpi.to_be_bytes();
+        dev.call(ADJUSTABLE_DPI, 3, &[0x00, hi, lo, level])?;
+        Ok(())
+    }
+
+    /// Report interval in ms (1 = 1000 Hz, 8 = 125 Hz).
+    pub fn report_interval(dev: &mut Device) -> Result<u8> {
+        Ok(dev.call(REPORT_RATE, 1, &[])?[4])
+    }
+
+    /// Supported intervals: bit n set = (n + 1) ms is allowed.
+    pub fn report_intervals(dev: &mut Device) -> Result<Vec<u8>> {
+        let mask = dev.call(REPORT_RATE, 0, &[])?[4];
+        Ok((0..8)
+            .filter(|b| mask & (1 << b) != 0)
+            .map(|b| b + 1)
+            .collect())
+    }
+
+    pub fn set_report_interval(dev: &mut Device, ms: u8) -> Result<()> {
+        dev.call(REPORT_RATE, 2, &[ms])?;
+        Ok(())
+    }
 }

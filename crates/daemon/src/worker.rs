@@ -23,6 +23,7 @@ pub enum Cmd {
     SetGain(u8, Reply),
     SetMuted(bool, Reply),
     Release(Reply),
+    MouseInfo(Reply),
 }
 
 pub struct Handle {
@@ -129,6 +130,18 @@ fn handle(
         Cmd::GetGain(tx) => reply(tx, mic::gain(dev).map(|g| json!(g))),
         Cmd::SetGain(g, tx) => reply(tx, mic::set_gain(dev, g).map(|_| Value::Null)),
         Cmd::SetMuted(m, tx) => reply(tx, mic::set_muted(dev, m).map(|_| Value::Null)),
+        Cmd::MouseInfo(tx) => {
+            use devices::mouse;
+            let info = (|| -> hidpp::Result<Value> {
+                Ok(json!({
+                    "dpi": mouse::dpi(dev)?,
+                    "dpi_list": mouse::dpi_range(dev)?,
+                    "report_interval": mouse::report_interval(dev)?,
+                    "report_intervals": mouse::report_intervals(dev)?,
+                }))
+            })();
+            reply(tx, info)
+        }
         Cmd::Release(tx) => {
             *anim = None;
             reply(tx, devices::release_lighting(dev).map(|_| Value::Null))
@@ -210,6 +223,14 @@ fn apply(
             *anim = None;
             devices::set_effect(dev, native_effect(lighting)?)?;
         }
+    }
+    if let Some(level) = cfg.dpi_level
+        && let Some(&dpi) = cfg.dpi_levels.get(level)
+    {
+        devices::mouse::set_dpi(dev, dpi, level as u8 + 1)?;
+    }
+    if let Some(ms) = cfg.report_interval {
+        devices::mouse::set_report_interval(dev, ms)?;
     }
     if let Some(b) = cfg.brightness {
         if let Some(a) = anim.as_mut() {

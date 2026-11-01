@@ -27,6 +27,17 @@ export type Lighting =
 export interface DeviceConfig {
   lighting?: Lighting;
   brightness?: number;
+  dpi_levels?: number[];
+  dpi_level?: number;
+  report_interval?: number;
+}
+
+export interface MouseInfo {
+  dpi: number;
+  /** Plain values and ranges encoded as low, 0xe000 | step, high. */
+  dpi_list: number[];
+  report_interval: number;
+  report_intervals: number[];
 }
 
 const request = <T>(req: Record<string, unknown>) => invoke<T>("request", { req });
@@ -37,6 +48,9 @@ export const api = {
   setLighting: (id: string, lighting: Lighting) => request<void>({ cmd: "set_lighting", id, lighting }),
   setBrightness: (id: string, percent: number) => request<void>({ cmd: "set_brightness", id, percent }),
   release: (id: string) => request<void>({ cmd: "release", id }),
+  mouseInfo: (id: string) => request<MouseInfo>({ cmd: "mouse_info", id }),
+  setDpi: (id: string, levels: number[], level: number) => request<void>({ cmd: "set_dpi", id, levels, level }),
+  setReportInterval: (id: string, ms: number) => request<void>({ cmd: "set_report_interval", id, ms }),
   getGain: (id: string) => request<number>({ cmd: "get_gain", id }),
   setGain: (id: string, gain: number) => request<void>({ cmd: "set_gain", id, gain }),
   setMuted: (id: string, muted: boolean) => request<void>({ cmd: "set_muted", id, muted }),

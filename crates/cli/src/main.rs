@@ -135,6 +135,30 @@ fn device_command(query: &str, args: &[String]) -> CmdResult {
         ("mute", 1) => mic::set_muted(&mut dev, true)?,
         ("unmute", 1) => mic::set_muted(&mut dev, false)?,
         ("release", 1) => devices::release_lighting(&mut dev)?,
+        ("brightness-info", 1) => {
+            let r = dev.call(hidpp::features::BRIGHTNESS, 0, &[])?;
+            let cur = dev.call(hidpp::features::BRIGHTNESS, 1, &[])?;
+            println!(
+                "{name}: info {:02x?} current {:02x?}",
+                &r[4..12],
+                &cur[4..8]
+            );
+        }
+        ("mouse", 1) => {
+            use devices::mouse;
+            println!(
+                "{name}: dpi {} (supported {:?})",
+                mouse::dpi(&mut dev)?,
+                mouse::dpi_range(&mut dev)?
+            );
+            println!(
+                "{name}: report interval {} ms (supported {:?} ms)",
+                mouse::report_interval(&mut dev)?,
+                mouse::report_intervals(&mut dev)?
+            );
+        }
+        ("dpi", 2) => devices::mouse::set_dpi(&mut dev, args[1].parse()?, 1)?,
+        ("report-rate", 2) => devices::mouse::set_report_interval(&mut dev, args[1].parse()?)?,
         ("raw-effect", 4) => {
             // Experiments: cluster, effect index, up to 10 hex parameter bytes.
             let cluster = u8::from_str_radix(&args[1], 16)?;

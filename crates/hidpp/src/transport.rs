@@ -85,6 +85,8 @@ pub struct Device {
     /// Index of the dongle's bridge feature; when set, requests go to the device behind it.
     bridge: Option<u8>,
     feature_cache: HashMap<u16, u8>,
+    /// Reply timeout for the current attempt; grows while a sleeping device wakes.
+    timeout: Duration,
 }
 
 /// Dongle feature that forwards messages to the headset behind a centurion receiver.
@@ -113,6 +115,7 @@ impl Device {
             framing,
             bridge: None,
             feature_cache: HashMap::new(),
+            timeout: TIMEOUT,
         };
         if let Framing::Centurion { .. } = framing {
             dev.probe_centurion_addr()?;
@@ -223,7 +226,8 @@ impl Device {
             1
         };
         let mut last = Err(Error::Timeout);
-        for _ in 0..attempts {
+        for attempt in 0..attempts {
+            self.timeout = TIMEOUT * (1 << attempt);
             last = match self.bridge {
                 Some(bridge) => self.bridged_request(bridge, feature_index, function, params),
                 None => self.direct_request(feature_index, function, params),
@@ -232,6 +236,7 @@ impl Device {
                 break;
             }
         }
+        self.timeout = TIMEOUT;
         // 0x08 = busy: the device is still digesting earlier messages (e.g. lighting frames).
         let mut busy_retries = 0;
         while matches!(last, Err(Error::Device(_, 0x08))) && busy_retries < 20 {
@@ -252,7 +257,7 @@ impl Device {
         params: &[u8],
     ) -> Result<[u8; REPLY_LEN]> {
         self.send(feature_index, function, params)?;
-        self.receive(feature_index, function, TIMEOUT)
+        self.receive(feature_index, function, self.timeout)
     }
 
     /// Bridge frame: [len header (2), inner cpl, inner feature, inner function, params...].
@@ -283,7 +288,7 @@ impl Device {
         body.extend_from_slice(params);
         self.send(bridge, 1, &body)?;
 
-        let deadline = Instant::now() + TIMEOUT;
+        let deadline = Instant::now() + self.timeout;
         loop {
             let left = deadline.saturating_duration_since(Instant::now());
             let Some(m) = self.read_message(left)? else {
