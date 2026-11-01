@@ -2,3 +2,10 @@ name = "G502 X PLUS"
 kind = "mouse"
 products = [0x4099]
 ghub_model = "g502x_plus"
+
+[layout]
+# Our own outline (the G HUB pictures for this mouse are encrypted); LED geometry comes from
+# the imported metadata.json.
+picture = "pictures/g502-x-plus.svg"
+# Light only inside the body outline (the drawing is transparent around it).
+picture_clip = "M300 190 C 420 60, 970 60, 1090 190 C 1260 430, 1330 900, 1300 1500 C 1290 1900, 1250 2350, 1050 2560 C 900 2690, 490 2690, 340 2560 C 140 2350, 100 1900, 90 1500 C 60 900, 130 430, 300 190 Z"

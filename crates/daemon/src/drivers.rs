@@ -21,6 +21,9 @@ pub struct Driver {
     pub input: Input,
     #[serde(default, rename = "firmware_effect")]
     pub firmware_effects: Vec<FirmwareEffect>,
+    /// Directory of the definition file, for paths inside it.
+    #[serde(skip)]
+    pub dir: PathBuf,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
@@ -31,6 +34,10 @@ pub struct Layout {
     pub zones: Option<String>,
     /// "first" crops multi-view lighting pictures to their first view (Yeti GX front).
     pub lighting_view: Option<String>,
+    /// Picture used when no imported one matches the LED geometry, relative to the file.
+    pub picture: Option<String>,
+    /// SVG path limiting where light shows on `picture`.
+    pub picture_clip: Option<String>,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
@@ -114,7 +121,8 @@ impl Registry {
                     .map_err(|e| e.to_string())
                     .and_then(|s| toml::from_str::<Driver>(&s).map_err(|e| e.to_string()));
                 match parsed {
-                    Ok(d) => {
+                    Ok(mut d) => {
+                        d.dir = dir.clone();
                         eprintln!("driver: {} from {}", d.name, file.display());
                         for &p in &d.products {
                             by_product.insert(p, d.clone());
@@ -125,6 +133,10 @@ impl Registry {
             }
         }
         Registry { by_product }
+    }
+
+    pub fn fallback_picture(d: &Driver) -> Option<PathBuf> {
+        d.layout.picture.as_ref().map(|p| d.dir.join(p))
     }
 
     pub fn for_product(&self, product: u16) -> Option<&Driver> {

@@ -255,7 +255,9 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
             Ok(json!(v.and_then(|v| view::layout(
                 v.model.as_deref()?,
                 v.hid_usage_zones,
-                v.first_view
+                v.first_view,
+                v.fallback_picture.as_deref(),
+                v.picture_clip.as_deref()
             ))))
         }
         Request::LightingState { id } => {

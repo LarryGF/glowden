@@ -40,6 +40,10 @@ pub struct DeviceView {
     /// Show only the first view of multi-view lighting pictures.
     #[serde(skip)]
     pub first_view: bool,
+    #[serde(skip)]
+    pub fallback_picture: Option<std::path::PathBuf>,
+    #[serde(skip)]
+    pub picture_clip: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -150,6 +154,8 @@ pub fn build(f: &mut Found, driver: Option<&crate::drivers::Driver>) -> DeviceVi
             .unwrap_or_default(),
         hid_usage_zones: driver.is_some_and(|d| d.layout.zones.as_deref() == Some("hid-usage")),
         first_view: driver.is_some_and(|d| d.layout.lighting_view.as_deref() == Some("first")),
+        fallback_picture: driver.and_then(crate::drivers::Registry::fallback_picture),
+        picture_clip: driver.and_then(|d| d.layout.picture_clip.clone()),
     }
 }
 
@@ -222,7 +228,13 @@ fn image_size(bytes: &[u8]) -> Option<(u32, u32)> {
 
 /// Device picture plus LED shapes in its pixel space, from the imported G HUB metadata.
 /// Shape ids are zone ids, except on keyboards where they are HID usages.
-pub fn layout(model: &str, keyboard: bool, first_view: bool) -> Option<serde_json::Value> {
+pub fn layout(
+    model: &str,
+    keyboard: bool,
+    first_view: bool,
+    fallback: Option<&std::path::Path>,
+    fallback_clip: Option<&str>,
+) -> Option<serde_json::Value> {
     use serde_json::{Value, json};
     let dir = std::path::PathBuf::from(std::env::var_os("HOME")?)
         .join(".local/share/lhub/devices")
@@ -268,16 +280,21 @@ pub fn layout(model: &str, keyboard: bool, first_view: bool) -> Option<serde_jso
         )
     };
     candidates.sort_by_key(|p| rank(p));
-    let (path, bytes) = candidates.into_iter().find_map(|p| {
-        let b = std::fs::read(&p).ok()?;
-        // Pictures can differ from the geometry's stated size by a pixel or two.
-        let (iw, ih) = image_size(&b)?;
-        (iw.abs_diff(w) <= w / 100 + 2 && ih.abs_diff(h) <= h / 100 + 2).then_some((p, b))
-    })?;
-    let mime = if path.extension()? == "png" {
-        "image/png"
-    } else {
-        "image/webp"
+    let (path, bytes, drawn) = candidates
+        .into_iter()
+        .find_map(|p| {
+            let b = std::fs::read(&p).ok()?;
+            // Pictures can differ from the geometry's stated size by a pixel or two.
+            let (iw, ih) = image_size(&b)?;
+            (iw.abs_diff(w) <= w / 100 + 2 && ih.abs_diff(h) <= h / 100 + 2).then_some((p, b))
+        })
+        // The driver's own drawing, made at the geometry's size.
+        .map(|(p, b)| (p, b, false))
+        .or_else(|| fallback.and_then(|p| Some((p.to_path_buf(), std::fs::read(p).ok()?, true))))?;
+    let mime = match path.extension()?.to_str()? {
+        "png" => "image/png",
+        "svg" => "image/svg+xml",
+        _ => "image/webp",
     };
 
     // Multi-view lighting pictures list one bounds box per view; optionally show the first.
@@ -313,5 +330,6 @@ pub fn layout(model: &str, keyboard: bool, first_view: bool) -> Option<serde_jso
         // Keyboards light their legends; other devices tint the LED regions.
         "legends": keyboard,
         "crop": crop,
+        "clip": if drawn { fallback_clip } else { None },
     }))
 }

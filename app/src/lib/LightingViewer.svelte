@@ -61,6 +61,10 @@
     for (const { path } of paths) m.fill(path);
     m.globalCompositeOperation = "destination-out";
     m.drawImage(photo, 0, 0, l.width, l.height);
+    if (l.clip) {
+      m.globalCompositeOperation = "destination-in";
+      m.fill(new Path2D(l.clip));
+    }
     layer = document.createElement("canvas");
     layer.width = l.width;
     layer.height = l.height;
