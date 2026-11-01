@@ -5,6 +5,7 @@ use hidpp::features;
 
 const USAGE: &str = "usage:
   lhub list                                  devices and their HID++ features
+  lhub import-ghub <dir>                     copy device pictures/layouts from a G HUB install
   lhub <dev> color RRGGBB
   lhub <dev> breathe RRGGBB [period_ms] [intensity%]
   lhub <dev> cycle [period_ms] [intensity%] [saturation]
@@ -20,6 +21,7 @@ fn main() -> ExitCode {
     let result = match args.first().map(String::as_str) {
         Some("list") => list(),
         Some("audio-levels") => audio_levels(),
+        Some("import-ghub") if args.len() == 2 => import_ghub(std::path::Path::new(&args[1])),
         Some(dev) if args.len() >= 2 => device_command(dev, &args[1..]),
         _ => Err(USAGE.into()),
     };
@@ -285,6 +287,79 @@ fn audio_levels() -> CmdResult {
             .map(|v| [' ', '.', ':', '-', '=', '+', '*', '#', '@'][(v * 8.0).round() as usize])
             .collect();
         println!("[{bars}]");
+    }
+    Ok(())
+}
+
+/// Copies device resource packages (pictures, image geometry, light maps, battery curves)
+/// out of a G HUB `depots` folder into ~/.local/share/lhub/devices/<model>/. They stay on
+/// this machine; nothing from G HUB is shipped with lhub.
+fn import_ghub(root: &std::path::Path) -> CmdResult {
+    use std::path::{Path, PathBuf};
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                walk(&p, out);
+            } else if p.file_name().is_some_and(|n| n == "manifest.json") {
+                out.push(p);
+            }
+        }
+    }
+    let wanted = |p: &Path| {
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        matches!(ext, "webp" | "png" | "xml")
+            || matches!(
+                name,
+                "metadata.json"
+                    | "light_map.json"
+                    | "lighting_effects.json"
+                    | "default_configurations.json"
+                    | "defaults_override.json"
+            )
+    };
+    let dest_root = PathBuf::from(std::env::var("HOME")?).join(".local/share/lhub/devices");
+    let mut manifests = Vec::new();
+    walk(root, &mut manifests);
+    let models = ["g515_ls_tkl", "g502x_plus", "g522", "yeti_gx"];
+    for manifest in manifests {
+        let text = std::fs::read_to_string(&manifest).unwrap_or_default();
+        let dir = manifest.parent().unwrap();
+        // Device resource packages have a metadata.json describing the device image.
+        if !dir.join("metadata.json").exists() {
+            continue;
+        }
+        let Some(model) = models.iter().find(|m| text.contains(&format!("\"{m}\""))) else {
+            continue;
+        };
+        let dest = dest_root.join(model);
+        let mut files = Vec::new();
+        fn collect(
+            dir: &Path,
+            base: &Path,
+            wanted: &dyn Fn(&Path) -> bool,
+            out: &mut Vec<(PathBuf, PathBuf)>,
+        ) {
+            for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    collect(&p, base, wanted, out);
+                } else if wanted(&p) {
+                    out.push((p.clone(), p.strip_prefix(base).unwrap().to_path_buf()));
+                }
+            }
+        }
+        collect(dir, dir, &wanted, &mut files);
+        for (src, rel) in &files {
+            let to = dest.join(rel);
+            std::fs::create_dir_all(to.parent().unwrap())?;
+            std::fs::copy(src, &to)?;
+        }
+        println!("{model}: {} files -> {}", files.len(), dest.display());
     }
     Ok(())
 }

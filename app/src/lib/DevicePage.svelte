@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Device } from "./api";
-  import DeviceIcon from "./DeviceIcon.svelte";
+  import DeviceVisual from "./DeviceVisual.svelte";
   import Info from "./panels/Info.svelte";
   import Lighting from "./panels/Lighting.svelte";
   import Microphone from "./panels/Microphone.svelte";
@@ -41,7 +41,7 @@
 <div class="page">
   <aside>
     <div class="hero">
-      <DeviceIcon kind={device.kind} size={84} />
+      <DeviceVisual {device} size={150} />
       <div class="name">{device.name}</div>
       {#if device.battery}<div class="battery">{device.battery.percent}%{device.battery.charging ? " · charging" : ""}</div>{/if}
     </div>

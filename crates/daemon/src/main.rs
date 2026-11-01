@@ -144,6 +144,9 @@ enum Request {
         id: String,
         muted: bool,
     },
+    DeviceImage {
+        id: String,
+    },
     MouseInfo {
         id: String,
     },
@@ -220,6 +223,14 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
         Request::SetGain { id, gain } => ask(shared, &id, |tx| Cmd::SetGain(gain, tx)),
         Request::SetMuted { id, muted } => ask(shared, &id, |tx| Cmd::SetMuted(muted, tx)),
         Request::MouseInfo { id } => ask(shared, &id, Cmd::MouseInfo),
+        Request::DeviceImage { id } => {
+            let st = lock.lock().unwrap();
+            let model = st
+                .workers
+                .get(&id)
+                .and_then(|h| h.view.lock().unwrap().model);
+            Ok(json!(model.and_then(view::image)))
+        }
         Request::SetDpi { id, levels, level } => {
             if levels.is_empty() || levels.len() > 5 || level >= levels.len() {
                 return Err("need 1-5 DPI levels and a valid active level".into());

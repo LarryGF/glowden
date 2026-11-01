@@ -11,6 +11,7 @@ export interface Device {
   battery: { percent: number; charging: boolean } | null;
   caps: string[];
   features: { id: string; name: string; version: number }[];
+  model: string | null;
 }
 
 /** Mirrors lhubd's config: speeds and sizes are 1..100 sliders. */
@@ -48,6 +49,7 @@ export const api = {
   setLighting: (id: string, lighting: Lighting) => request<void>({ cmd: "set_lighting", id, lighting }),
   setBrightness: (id: string, percent: number) => request<void>({ cmd: "set_brightness", id, percent }),
   release: (id: string) => request<void>({ cmd: "release", id }),
+  deviceImage: (id: string) => request<string | null>({ cmd: "device_image", id }),
   mouseInfo: (id: string) => request<MouseInfo>({ cmd: "mouse_info", id }),
   setDpi: (id: string, levels: number[], level: number) => request<void>({ cmd: "set_dpi", id, levels, level }),
   setReportInterval: (id: string, ms: number) => request<void>({ cmd: "set_report_interval", id, ms }),

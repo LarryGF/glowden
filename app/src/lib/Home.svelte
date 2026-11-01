@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Device } from "./api";
-  import DeviceIcon from "./DeviceIcon.svelte";
+  import DeviceVisual from "./DeviceVisual.svelte";
 
   let { devices, loading, onopen }: { devices: Device[]; loading: boolean; onopen: (d: Device) => void } = $props();
 </script>
@@ -14,7 +14,7 @@
     <div class="grid">
       {#each devices as d (d.id)}
         <button class="card" onclick={() => onopen(d)}>
-          <div class="icon"><DeviceIcon kind={d.kind} size={112} /></div>
+          <div class="icon"><DeviceVisual device={d} size={150} /></div>
           <div class="name">{d.name}</div>
           <div class="meta">
             <span class="badge">{d.connection}</span>
