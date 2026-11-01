@@ -96,3 +96,21 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 Analog keyboard features (actuation point, rapid trigger, key priority), wheels and
 force feedback, Trueforce, haptics, LampArray, UVC cameras, Overwolf/Discord/OBS applets,
 G HUB accounts/community/marketplace, game library (`gl`), Windows audio mixing (`mixline`).
+
+## Windows drivers G HUB installs
+
+| Package | What it is | Linux equivalent |
+|---|---|---|
+| `driver_audio_apo` | Audio effect plugins: Blue VO!CE 2 (DTS ClearVoice 2), Blue VO!CE 1 (DTS Studio), headset capture/render, speaker render | VO!CE 2 runs via our PE loader (`docs/voice.md`); the headset/speaker plugins target older headsets, not the G522 |
+| `driver_audio_sampler_apo` | "Audio Sampler": taps playback for the audio visualizer | PipeWire monitor capture (`crates/lighting/src/audio.rs`) |
+| `driver_audio_g522` | INF only: attaches the Audio Sampler to the G522 microphone (mic level, mic test) | PipeWire source monitoring; G522 voice processing is on the headset (Logivoice, HID++ `0x0900`–`0x0908`) |
+| `driver_hid_virtual` | Virtual HID device for key/mouse emulation (macros, remaps) | `/dev/uinput` (needs a udev rule) |
+| `driver_logi_lamparray` | Windows Dynamic Lighting (LampArray) | n/a |
+| `driver_usb`, `driver_audio_devices` | USB and audio device plumbing | kernel drivers (`hid-logitech-dj`, `snd-usb-audio`) |
+
+## Device pictures
+
+Imported at runtime with `lhub import-ghub <G HUB depots dir>` into `~/.local/share/lhub/devices/`.
+G515, G522 and Yeti GX pictures and LED geometry work (live viewer overlay). The G502 X PLUS
+device pictures in its package are encrypted (G HUB fetches the key online); they are skipped,
+and the mouse shows its unencrypted product card plus a zone strip.
