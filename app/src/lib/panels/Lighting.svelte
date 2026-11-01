@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { api, debounce, type Device, type Lighting } from "../api";
+  import LightingViewer from "../LightingViewer.svelte";
 
   let { device, onerror }: { device: Device; onerror: (e: unknown) => void } = $props();
 
@@ -96,12 +97,7 @@
     {/each}
   </div>
 
-  <div
-    class="preview {effect}"
-    style:--c={color}
-    style:--b={base}
-    style:--p="{Math.round(20000 - ((speed - 1) * 19000) / 99)}ms"
-  ></div>
+  <LightingViewer {device} />
 
   {#if hasColor}
     <div class="row">

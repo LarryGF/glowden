@@ -30,6 +30,21 @@ pub struct Handle {
     pub tx: Sender<Cmd>,
     pub view: Arc<Mutex<DeviceView>>,
     pub alive: Arc<AtomicBool>,
+    /// What the LEDs show, for the UI's lighting viewer.
+    pub lights: Arc<Mutex<LightState>>,
+}
+
+#[derive(Default, Clone, serde::Serialize)]
+pub struct LightState {
+    /// "live" when we stream frames (zones are exact), "device" when the device runs the
+    /// effect itself (zones hold its base color), "none" before anything was applied.
+    pub mode: &'static str,
+    pub effect: Option<String>,
+    pub zones: std::collections::BTreeMap<u8, String>,
+}
+
+fn hex(c: [u8; 3]) -> String {
+    format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
 }
 
 struct Animation {
@@ -43,17 +58,22 @@ pub fn spawn(mut found: Found, config: DeviceConfig) -> Handle {
     let (tx, rx) = mpsc::channel();
     let view = Arc::new(Mutex::new(view::build(&mut found)));
     let alive = Arc::new(AtomicBool::new(true));
+    let lights = Arc::new(Mutex::new(LightState {
+        mode: "none",
+        ..Default::default()
+    }));
     let handle = Handle {
         tx: tx.clone(),
         view: view.clone(),
         alive: alive.clone(),
+        lights: lights.clone(),
     };
     let _ = tx.send(Cmd::Apply(config));
     std::thread::Builder::new()
         .name(format!("dev {}", found.id))
         .spawn(move || {
             let id = found.id.clone();
-            if let Err(e) = run(found, rx, view) {
+            if let Err(e) = run(found, rx, view, lights) {
                 eprintln!("{id}: worker stopped: {e}");
             }
             alive.store(false, Ordering::Relaxed);
@@ -62,7 +82,12 @@ pub fn spawn(mut found: Found, config: DeviceConfig) -> Handle {
     handle
 }
 
-fn run(mut found: Found, rx: Receiver<Cmd>, view: Arc<Mutex<DeviceView>>) -> Result<(), String> {
+fn run(
+    mut found: Found,
+    rx: Receiver<Cmd>,
+    view: Arc<Mutex<DeviceView>>,
+    lights: Arc<Mutex<LightState>>,
+) -> Result<(), String> {
     let kind = view.lock().unwrap().kind;
     let mut anim: Option<Animation> = None;
     let mut last_battery = Instant::now();
@@ -73,7 +98,16 @@ fn run(mut found: Found, rx: Receiver<Cmd>, view: Arc<Mutex<DeviceView>>) -> Res
             .map_or(Duration::from_secs(1), |a| a.streamer.frame_interval);
         let tick = Instant::now();
         match rx.recv_timeout(wait) {
-            Ok(cmd) => handle(&mut found, kind, cmd, &mut anim)?,
+            Ok(cmd) => {
+                let applied = match &cmd {
+                    Cmd::Apply(cfg) => cfg.lighting.clone(),
+                    _ => None,
+                };
+                handle(&mut found, kind, cmd, &mut anim)?;
+                if let Some(l) = applied {
+                    record_device_lighting(&mut found, &l, anim.is_some(), &lights);
+                }
+            }
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => return Ok(()),
         }
@@ -88,6 +122,14 @@ fn run(mut found: Found, rx: Receiver<Cmd>, view: Arc<Mutex<DeviceView>>) -> Res
             a.streamer
                 .frame(&mut found.device, a.effect.as_mut(), &a.recent)
                 .map_err(|e| format!("animation: {e}"))?;
+            let mut l = lights.lock().unwrap();
+            l.mode = "live";
+            l.zones = a
+                .streamer
+                .colors()
+                .iter()
+                .map(|(z, c)| (*z, hex(*c)))
+                .collect();
         }
 
         if last_battery.elapsed() > Duration::from_secs(60) {
@@ -306,4 +348,34 @@ fn host_effect(l: &Lighting) -> Result<Box<dyn Effect>, String> {
         ),
         _ => unreachable!("device-native effect"),
     })
+}
+
+/// For device-run effects, the viewer shows every zone in the effect's base color.
+fn record_device_lighting(
+    found: &mut Found,
+    l: &Lighting,
+    live: bool,
+    lights: &Arc<Mutex<LightState>>,
+) {
+    let effect = serde_json::to_value(l)
+        .ok()
+        .and_then(|v| v["effect"].as_str().map(str::to_string));
+    let mut st = lights.lock().unwrap();
+    st.effect = effect;
+    if live {
+        return;
+    }
+    let color = match l {
+        Lighting::Fixed { color }
+        | Lighting::Breathing { color, .. }
+        | Lighting::Ripple { color } => parse_rgb(color).ok(),
+        Lighting::Cycle { .. } => Some([0xff, 0x2a, 0x2a]),
+        _ => None,
+    };
+    st.mode = "device";
+    st.zones.clear();
+    if let Some(c) = color {
+        let zones = devices::perkey::zones(&mut found.device).unwrap_or_else(|_| vec![1]);
+        st.zones = zones.into_iter().map(|z| (z, hex(c))).collect();
+    }
 }

@@ -41,6 +41,26 @@ export interface MouseInfo {
   report_intervals: number[];
 }
 
+/** Device picture with LED shapes in its pixel space (from the imported G HUB metadata). */
+export interface Layout {
+  width: number;
+  height: number;
+  image: string;
+  shapes: {
+    zone: number;
+    shape:
+      | { type: "rect"; rect: { x: number; y: number; width: number; height: number } }
+      | { type: "circle"; rect: { x: number; y: number; r: number } }
+      | { type: "path"; d: string };
+  }[];
+}
+
+export interface LightState {
+  mode: "live" | "device" | "none";
+  effect: string | null;
+  zones: Record<string, string>;
+}
+
 const request = <T>(req: Record<string, unknown>) => invoke<T>("request", { req });
 
 export const api = {
@@ -49,6 +69,8 @@ export const api = {
   setLighting: (id: string, lighting: Lighting) => request<void>({ cmd: "set_lighting", id, lighting }),
   setBrightness: (id: string, percent: number) => request<void>({ cmd: "set_brightness", id, percent }),
   release: (id: string) => request<void>({ cmd: "release", id }),
+  deviceLayout: (id: string) => request<Layout | null>({ cmd: "device_layout", id }),
+  lightingState: (id: string) => request<LightState>({ cmd: "lighting_state", id }),
   deviceImage: (id: string) => request<string | null>({ cmd: "device_image", id }),
   mouseInfo: (id: string) => request<MouseInfo>({ cmd: "mouse_info", id }),
   setDpi: (id: string, levels: number[], level: number) => request<void>({ cmd: "set_dpi", id, levels, level }),

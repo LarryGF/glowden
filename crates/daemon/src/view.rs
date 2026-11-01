@@ -162,3 +162,111 @@ fn base64(data: &[u8]) -> String {
     }
     out
 }
+
+/// Pixel size of a PNG or WebP file, from its header.
+fn image_size(bytes: &[u8]) -> Option<(u32, u32)> {
+    let be = |b: &[u8]| u32::from_be_bytes([b[0], b[1], b[2], b[3]]);
+    if bytes.starts_with(b"\x89PNG") && bytes.len() > 24 {
+        return Some((be(&bytes[16..20]), be(&bytes[20..24])));
+    }
+    if bytes.len() < 30 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WEBP" {
+        return None;
+    }
+    let le24 = |b: &[u8]| b[0] as u32 | (b[1] as u32) << 8 | (b[2] as u32) << 16;
+    match &bytes[12..16] {
+        b"VP8X" => Some((le24(&bytes[24..27]) + 1, le24(&bytes[27..30]) + 1)),
+        b"VP8L" => {
+            let b = u32::from_le_bytes([bytes[21], bytes[22], bytes[23], bytes[24]]);
+            Some(((b & 0x3fff) + 1, ((b >> 14) & 0x3fff) + 1))
+        }
+        b"VP8 " => Some((
+            u16::from_le_bytes([bytes[26], bytes[27]]) as u32 & 0x3fff,
+            u16::from_le_bytes([bytes[28], bytes[29]]) as u32 & 0x3fff,
+        )),
+        _ => None,
+    }
+}
+
+/// Device picture plus LED shapes in its pixel space, from the imported G HUB metadata.
+/// Shape ids are zone ids, except on keyboards where they are HID usages.
+pub fn layout(model: &str, keyboard: bool) -> Option<serde_json::Value> {
+    use serde_json::{Value, json};
+    let dir = std::path::PathBuf::from(std::env::var_os("HOME")?)
+        .join(".local/share/lhub/devices")
+        .join(model);
+    let meta: Value =
+        serde_json::from_slice(&std::fs::read(dir.join("metadata.json")).ok()?).ok()?;
+    let images = meta["images"].as_array()?;
+    let has_shapes = |img: &Value| {
+        img["zones"].as_array().is_some_and(|z| {
+            z.iter()
+                .any(|z| z["components"].as_array().is_some_and(|c| !c.is_empty()))
+        })
+    };
+    let img = images
+        .iter()
+        .find(|i| i["key"] == "device_image_lighting" && has_shapes(i))
+        .or_else(|| images.iter().find(|i| has_shapes(i)))?;
+    let (w, h) = (
+        img["origin"]["width"].as_u64()? as u32,
+        img["origin"]["height"].as_u64()? as u32,
+    );
+
+    // The picture this geometry belongs to: same pixel size, lighting/front/dark variants first.
+    let mut candidates = Vec::new();
+    let mut stack = vec![dir.clone()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if matches!(p.extension().and_then(|e| e.to_str()), Some("png" | "webp")) {
+                candidates.push(p);
+            }
+        }
+    }
+    let rank = |p: &std::path::Path| {
+        let n = p.to_string_lossy().to_lowercase();
+        (
+            !n.contains("lighting") as u8,
+            n.contains("white") as u8,
+            n.contains("splash") as u8,
+            n.contains("promotion") as u8,
+        )
+    };
+    candidates.sort_by_key(|p| rank(p));
+    let (path, bytes) = candidates.into_iter().find_map(|p| {
+        let b = std::fs::read(&p).ok()?;
+        // Pictures can differ from the geometry's stated size by a pixel or two.
+        let (iw, ih) = image_size(&b)?;
+        (iw.abs_diff(w) <= w / 100 + 2 && ih.abs_diff(h) <= h / 100 + 2).then_some((p, b))
+    })?;
+    let mime = if path.extension()? == "png" {
+        "image/png"
+    } else {
+        "image/webp"
+    };
+
+    let mut shapes = Vec::new();
+    for zone in img["zones"].as_array()? {
+        for c in zone["components"].as_array().into_iter().flatten() {
+            let id = c["id"].as_u64()? as u8;
+            let zone_id = if keyboard {
+                lighting::layout::zone_for_usage(id)
+            } else {
+                Some(id)
+            };
+            let Some(zone_id) = zone_id else { continue };
+            for r in c["renderings"].as_array().into_iter().flatten() {
+                shapes.push(json!({ "zone": zone_id, "shape": r }));
+            }
+        }
+    }
+    Some(json!({
+        "width": w,
+        "height": h,
+        "image": format!("data:{mime};base64,{}", base64(&bytes)),
+        "shapes": shapes,
+        "transforms": img.get("coordinate_transforms"),
+    }))
+}

@@ -312,7 +312,9 @@ fn import_ghub(root: &std::path::Path) -> CmdResult {
     let wanted = |p: &Path| {
         let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
         let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        let in_images = p.components().any(|c| c.as_os_str() == "images");
         matches!(ext, "webp" | "png" | "xml")
+            || (ext.is_empty() && in_images)
             || matches!(
                 name,
                 "metadata.json"
@@ -355,7 +357,22 @@ fn import_ghub(root: &std::path::Path) -> CmdResult {
         }
         collect(dir, dir, &wanted, &mut files);
         for (src, rel) in &files {
-            let to = dest.join(rel);
+            // Some packages store pictures without an extension; name them by their content.
+            // Encrypted assets (G HUB fetches their keys online) are left out.
+            let mut rel = rel.clone();
+            if rel.extension().is_none() {
+                let head = std::fs::read(src)
+                    .map(|b| b[..b.len().min(12)].to_vec())
+                    .unwrap_or_default();
+                if head.starts_with(b"\x89PNG") {
+                    rel.set_extension("png");
+                } else if head.starts_with(b"RIFF") && head.get(8..12) == Some(b"WEBP") {
+                    rel.set_extension("webp");
+                } else {
+                    continue;
+                }
+            }
+            let to = dest.join(&rel);
             std::fs::create_dir_all(to.parent().unwrap())?;
             std::fs::copy(src, &to)?;
         }

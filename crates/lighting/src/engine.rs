@@ -59,6 +59,11 @@ impl Streamer {
         })
     }
 
+    /// Colors currently shown on the device, per zone.
+    pub fn colors(&self) -> &HashMap<u8, Rgb> {
+        &self.shown
+    }
+
     /// Renders one frame and sends only the zones whose color changed. Returns the
     /// number of zones updated.
     pub fn frame(

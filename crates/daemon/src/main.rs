@@ -147,6 +147,12 @@ enum Request {
     DeviceImage {
         id: String,
     },
+    DeviceLayout {
+        id: String,
+    },
+    LightingState {
+        id: String,
+    },
     MouseInfo {
         id: String,
     },
@@ -223,6 +229,22 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
         Request::SetGain { id, gain } => ask(shared, &id, |tx| Cmd::SetGain(gain, tx)),
         Request::SetMuted { id, muted } => ask(shared, &id, |tx| Cmd::SetMuted(muted, tx)),
         Request::MouseInfo { id } => ask(shared, &id, Cmd::MouseInfo),
+        Request::DeviceLayout { id } => {
+            let st = lock.lock().unwrap();
+            let v = st.workers.get(&id).map(|h| h.view.lock().unwrap().clone());
+            Ok(json!(v.and_then(|v| view::layout(
+                v.model?,
+                v.kind == "keyboard"
+            ))))
+        }
+        Request::LightingState { id } => {
+            let st = lock.lock().unwrap();
+            let h = st
+                .workers
+                .get(&id)
+                .ok_or_else(|| format!("device {id} is not connected"))?;
+            Ok(json!(*h.lights.lock().unwrap()))
+        }
         Request::DeviceImage { id } => {
             let st = lock.lock().unwrap();
             let model = st
