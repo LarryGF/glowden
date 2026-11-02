@@ -1,106 +1,127 @@
 # GlowDen
 
-An open device hub for Logitech G peripherals on Linux: lighting, buttons, DPI,
+An open device hub for Logitech G peripherals on Linux: lighting, buttons, DPI, profiles,
 microphone and headset settings, kept applied by a background service, with a desktop app.
 No Wine.
 
-GlowDen is a framework. It ships its own code and device definitions (protocol facts); you
-bring the assets. Pictures, sound clips, VO!CE presets and the optional Blue VO!CE engine
-are read at runtime from G HUB folders you choose (Settings → G HUB files), and nothing from
-Logitech or DTS is part of this repo or its packages. GlowDen is not affiliated with Logitech;
-see [`NOTICE.md`](NOTICE.md).
+GlowDen is a framework. This repository is the engine (service, desktop app, HID++
+protocol); what it knows about each device comes from device sources
+([glowden-devices](https://github.com/larryGF/glowden-devices) is built in), and the
+assets come from you: pictures, sound clips, VO!CE presets and the optional Blue VO!CE
+engine are read from G HUB files you point it at. Nothing from Logitech or DTS is part of
+this repository or its packages. GlowDen is not affiliated with Logitech; see
+[`NOTICE.md`](NOTICE.md).
 
-## Supported hardware
+## What it does
 
-| Device | Working today |
-|---|---|
-| Yeti GX microphone | Lighting, brightness, hardware gain, mute |
-| G515 LS TKL keyboard | Lighting (device effects, per-key, firmware ripple), live effects, brightness |
-| G502 X PLUS mouse | Lighting, live effects, DPI levels, report rate |
-| G522 LIGHTSPEED headset | Detection through its dongle; settings in progress |
+- **Lighting**: device effects, per-key painting, live effects drawn by the service (wave,
+  pulse, starlight, audio visualizer, screen sampler, custom sequences), brightness, sync
+  across devices, saved presets.
+- **Mice**: DPI levels with a default level and a DPI shift, report rate, button
+  assignments (keys, macros, media and desktop actions, programs, sounds), left-handed mode.
+- **Microphones**: gain, mute, Blue VO!CE presets and fine-tuning, G HUB's voice effects,
+  level meter, preset test on a recording (Yeti GX; VO!CE needs the user's own engine).
+- **Profiles** per application (switch with the focused window on KDE Plasma), backups,
+  tray icon, low-battery and lock-key notifications, start on login.
 
-Full G HUB feature inventory and port status: [`docs/FEATURES.md`](docs/FEATURES.md).
-Current state and known issues: [`docs/STATUS.md`](docs/STATUS.md).
-
-## Build
-
-Requires the Rust toolchain (pinned by `rust-toolchain.toml`), Node with pnpm, and the
-WebKitGTK 4.1, GTK 3, PipeWire, libsystemd and D-Bus development packages.
-
-```sh
-cargo build --release -p glowdend -p glowden-cli -p glowden-sampler
-cd app && pnpm install && pnpm tauri build   # desktop app (after the cargo build)
-```
-
-Binaries land in `target/release/`: `glowden` (app), `glowdend`, `glowdenctl` and
-`glowden-sampler` (screen sampler).
+Tested with a G515 LS TKL keyboard, a G502 X PLUS mouse, a Yeti GX microphone and a G522
+headset (detection and battery only so far). Port status against G HUB:
+[`docs/FEATURES.md`](docs/FEATURES.md); current state: [`docs/STATUS.md`](docs/STATUS.md).
 
 ## Install
 
-Device access needs the udev rule (hidraw for Logitech devices, key events from Logitech
-keyboards for reactive effects, granted to the logged-in user):
+Download the package for your system from the
+[latest release](https://github.com/larryGF/glowden/releases/latest):
+
+**Arch Linux and derivatives**
+
+```sh
+sudo pacman -U glowden-<version>-1-x86_64.pkg.tar.zst
+```
+
+**Debian 12+, Ubuntu 22.04+ and derivatives**
+
+```sh
+sudo apt install ./glowden_<version>_amd64.deb
+```
+
+Both install the app (`glowden`, also in your app menu as GlowDen), the service
+(`glowdend`), the CLI (`glowdenctl`), a udev rule giving the logged-in user access to
+Logitech devices, and a systemd user unit. If a device doesn't show up right after
+installing, replug it once so the udev rule applies to it.
+
+**Requirements**: PipeWire as the sound server for Blue VO!CE, voice effects and the audio
+visualizer (default on Arch, Debian 12 desktops and Ubuntu 22.10+; on Ubuntu 22.04 install
+`pipewire-pulse`). Per-app profiles follow the focused window on KDE Plasma. The screen
+sampler needs `xdg-desktop-portal`; the tray icon needs libayatana-appindicator.
+
+### First start
+
+1. Open **GlowDen**. It starts the service if it isn't running; to keep it running from
+   login, turn on *Start the GlowDen service when you log in* in Settings (or
+   `systemctl --user enable --now glowdend`).
+2. **Settings → Device sources**: the built-in source installs definitions for your devices
+   automatically when they connect. Devices that need a plugin (Blue VO!CE on the Yeti GX)
+   work after you choose *Allow plugins* for that source.
+3. **Settings → G HUB files** (optional): add a folder with G HUB's files to get device
+   pictures, sound clips, the VO!CE presets and its engine. On a dual-boot machine, mount
+   the Windows drive and add it; GlowDen looks in the right places on it. Any folder holding
+   the files works too. GlowDen reads them where they are and never copies them; what you
+   point it at, and under which terms you got it, is your responsibility.
+
+### Uninstall
+
+`sudo pacman -R glowden` or `sudo apt remove glowden`. Your settings stay in
+`~/.config/glowden`; downloaded definitions and plugins in `~/.local/share/glowden`.
+
+## Build from source
+
+Requires the Rust toolchain, Node 20+ with pnpm, and the WebKitGTK 4.1, GTK 3, PipeWire,
+libsystemd and D-Bus development packages.
+
+```sh
+cargo build --release -p glowdend -p glowden-cli -p glowden-sampler
+cd app && pnpm install && pnpm tauri build   # desktop app, after the cargo build
+```
+
+Binaries land in `target/release/`. Packages from a checkout: `makepkg -si` in
+`packaging/arch`, or `packaging/deb/build.sh` (Docker; builds in Ubuntu 22.04 so the .deb
+runs on Ubuntu 22.04+ and Debian 12+). Without a package, install the udev rule yourself:
 
 ```sh
 sudo install -Dm644 packaging/udev/70-glowden.rules /usr/lib/udev/rules.d/70-glowden.rules
 sudo udevadm control --reload-rules
-sudo udevadm trigger --subsystem-match=hidraw --subsystem-match=input --action=change
+sudo udevadm trigger --subsystem-match=hidraw --subsystem-match=input --subsystem-match=misc --action=change
 ```
-
-Packages install all of that (binaries, rule, systemd user unit, desktop entry):
-
-- **Arch**: `makepkg -si` in `packaging/arch`.
-- **Debian 12+ / Ubuntu 22.04+**: `packaging/deb/build.sh` builds `dist/glowden_<version>_amd64.deb`
-  in an Ubuntu 22.04 container (needs Docker); install it with `sudo apt install ./dist/glowden_*.deb`.
-
-Blue VO!CE, the voice effects and the audio visualizer need PipeWire as the sound server
-(the default on Ubuntu 22.10+, Debian 12 desktops and Arch). Ubuntu 22.04 uses PulseAudio
-by default, so those features need `pipewire-pulse` there.
-
-Then start the service for your user: `systemctl --user enable --now glowdend` (the app also
-starts it when it isn't running).
 
 ## Use
 
-- `glowden` opens the desktop app and starts the service if it isn't running.
-- `glowdend` keeps every device's settings in `~/.config/glowden/config.json` and re-applies them
-  when a device connects or wakes. Live effects (wave, pulse, starlight, visualizer) are
-  drawn by the service and keep running without the app.
-- `glowdenctl` is a CLI for inspection and experiments: `glowdenctl list`, `glowdenctl <device> effects`,
+- `glowden` is the desktop app; closing its window keeps it in the tray.
+- `glowdend` keeps every device's settings in `~/.config/glowden/config.json` and re-applies
+  them when a device connects or wakes. Live effects keep running without the app.
+- `glowdenctl` inspects devices: `glowdenctl list`, `glowdenctl <device> effects`;
   `GLOWDEN_DEBUG=1 glowdenctl …` prints every HID++ frame.
-
-### Devices and plugins
-
-What GlowDen knows about each device (kind, key layout, LED regions, buttons, firmware
-effects) comes from device sources: GlowDen's own
-([glowden-devices](https://github.com/larryGF/glowden-devices)) is always listed, and you can
-add others in Settings → Device sources. A device that connects without a definition is
-looked up there automatically, and you can install or remove definitions one by one.
-
-Some devices need code as well, shipped by the source as a plugin (Blue VO!CE on the Yeti
-GX is one). Plugins are programs, so they run only after you allow that source's plugins.
-
-### G HUB files
-
-Device pictures, LED geometry, sound clips, the Blue VO!CE presets and its engine come from
-a G HUB installation you have, for example on a dual-boot Windows drive: mount it and add
-the drive (or any folder with the files) in Settings → G HUB files. GlowDen reads the files
-where they are and never copies them; what you point it at, and under which terms you got
-it, is your responsibility. Encrypted files are skipped.
 
 ## Layout
 
 | Path | What |
 |---|---|
 | `crates/hidpp` | HID++ 2.0 over hidraw, headset (centurion) transport, device features |
-| `crates/lighting` | Key layout, per-key streaming, effects, audio analyzer, key input |
-| `crates/daemon` | `glowdend`: per-device workers, persistent config, Unix socket API |
-| `crates/cli` | `glowdenctl` CLI |
-| `app` | Tauri + Svelte desktop app (client of `glowdend`) |
-| `packaging` | udev rule, systemd unit, Arch package |
-| `docs` | Feature inventory, status, protocol notes |
+| `crates/lighting` | Key layout, per-key streaming, effects, audio analyzer, screen capture client |
+| `crates/daemon` | `glowdend`: device workers, config, device sources, G HUB files, plugins, socket API |
+| `crates/cli` | `glowdenctl` |
+| `crates/sampler` | `glowden-sampler`: screen colors through the ScreenCast portal |
+| `app` | Tauri + Svelte desktop app (a client of `glowdend`) |
+| `packaging` | udev rule, systemd unit, desktop entry, Arch and Debian packaging |
+| `docs` | Feature inventory and status |
+
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md). Device definitions and plugins go to
+[glowden-devices](https://github.com/larryGF/glowden-devices).
 
 ## License
 
-GlowDen is licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at
-your option. Files you import from G HUB stay under Logitech's and DTS's terms; see
+Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your
+option. Files you use from G HUB stay under Logitech's and DTS's terms; see
 [`NOTICE.md`](NOTICE.md).
