@@ -118,9 +118,62 @@ fn binary() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("lhub-voice"))
 }
 
+/// What a preset does, for the app: the numbers that differ between presets.
+pub fn summary(settings: &Value) -> Value {
+    let n = |path: &str| path.split('.').fold(settings, |v, k| &v[k]).as_f64();
+    serde_json::json!({
+        "noise_reduction": n("noiseReduction.maxAttenuation"),
+        "bass": n("multiBandEq.lowBandFilter.gain").unwrap_or(0.0),
+        "mids": n("multiBandEq.midBandFilter.gain").unwrap_or(0.0),
+        "treble": n("multiBandEq.highBandFilter.gain").unwrap_or(0.0),
+        "compression": n("gatingCompressor.compressorRatio"),
+        "de_esser": n("deEsser.maxAttenuation"),
+        "boost": n("hardLimiter.boost"),
+        "input_gain": n("inputGain"),
+    })
+}
+
+fn test_dir() -> PathBuf {
+    PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR").unwrap_or_else(|| "/tmp".into()))
+        .join("lhub-voice-test")
+}
+
+/// Records `seconds` of the raw microphone for the preset test.
+pub fn record_test(def: &VoiceDef, seconds: u64) -> Result<(), String> {
+    let source = source_node(&def.source)
+        .ok_or_else(|| format!("no PipeWire source matching \"{}\"", def.source))?;
+    std::fs::create_dir_all(test_dir()).map_err(|e| e.to_string())?;
+    let mut child = Command::new("pw-record")
+        .args([
+            "--target",
+            &source,
+            "--format",
+            "f32",
+            "--rate",
+            "48000",
+            "--channels",
+            "1",
+        ])
+        .arg(test_dir().join("raw.wav"))
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("cannot start pw-record: {e}"))?;
+    std::thread::sleep(std::time::Duration::from_secs(seconds.clamp(1, 30)));
+    // SIGINT lets pw-record finish the WAV header.
+    unsafe { libc::kill(child.id() as i32, libc::SIGINT) };
+    let _ = child.wait();
+    Ok(())
+}
+
+pub fn has_test() -> bool {
+    test_dir().join("raw.wav").exists()
+}
+
 #[derive(Default)]
 pub struct Voice {
     running: HashMap<String, Child>,
+    playing: Option<Child>,
     /// Why the last start for a device failed, for the UI.
     errors: HashMap<String, String>,
 }
@@ -152,6 +205,50 @@ impl Voice {
             .stdin(Stdio::null())
             .spawn()
             .map_err(|e| format!("cannot start lhub-voice: {e}"))
+    }
+
+    /// Plays the test recording as recorded (`None`) or through a preset.
+    pub fn play_test(&mut self, settings: Option<&Value>) -> Result<(), String> {
+        self.stop_test();
+        let raw = test_dir().join("raw.wav");
+        if !raw.exists() {
+            return Err("record a test first".into());
+        }
+        let file = match settings {
+            None => raw,
+            Some(s) => {
+                let out = test_dir().join("processed.wav");
+                let dll = engine().ok_or("the engine isn't imported yet")?;
+                let status = Command::new(binary())
+                    .arg(dll)
+                    .args(engine_args(s))
+                    .arg("--process")
+                    .args([&raw, &out])
+                    .stdin(Stdio::null())
+                    .status()
+                    .map_err(|e| format!("cannot start lhub-voice: {e}"))?;
+                if !status.success() {
+                    return Err("processing the test failed".into());
+                }
+                out
+            }
+        };
+        self.playing = Some(
+            Command::new("pw-play")
+                .arg(file)
+                .stdin(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .map_err(|e| format!("cannot start pw-play: {e}"))?,
+        );
+        Ok(())
+    }
+
+    pub fn stop_test(&mut self) {
+        if let Some(mut child) = self.playing.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 
     pub fn stop(&mut self, id: &str) {

@@ -77,6 +77,7 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Mic processing (Logivoice: NR, gate, compressor, de-esser, de-popper, limiter, HPF, EQ) | next | `0x0900`–`0x0908`, runs on the headset |
 | Mic gain, mute | next | `0x0611`, `0x0601` |
 | Auto sleep, battery saver, tones | next | `0x0108`, `0x0618`, `0x060b` |
+| Battery level | built | centurion `0x0104` fn0 byte 0 (seen draining); charging byte unconfirmed |
 | Headset lighting | next | `0x0620`–`0x0622` |
 
 ## Microphone (Yeti GX)
@@ -133,9 +134,13 @@ and the mouse shows its unencrypted product card plus a zone strip.
 
 | G HUB setting | Status | Notes |
 |---|---|---|
-| Start on login | built | systemd user unit for the service (`packaging/systemd`) |
-| Notifications: general, low battery, Caps/Num lock | planned | `notifications_enabled`, `low_battery_notifications_enabled`, `lock_notifications_enabled` |
+| Start on login | built | Settings page toggles the systemd user unit (writes one for dev builds) |
+| Notifications: low battery | built | Desktop notification at 15 %, once per discharge; general and Caps/Num lock still planned |
+| Notifications: general, Caps/Num lock | planned | `notifications_enabled`, `low_battery_notifications_enabled`, `lock_notifications_enabled` |
 | Language | planned | UI is English only |
 | Home layout (grid/list) | planned | `home_layout` |
 | Tray icon with device list, DPI and battery | planned | `/system_tray/*` |
 | Analytics, accounts, device recommendations | n/a | |
+| G HUB data folders: scan and import | built | Settings page: pictures, LED layouts, VO!CE engine and presets (reads settings.db) |
+| Add a device (starter definition) | built | Settings page writes `~/.local/share/lhub/drivers/<device>.toml` |
+| VO!CE preset test (record, compare presets on one take) | built | `lhub-voice --process` runs presets offline on the recording |

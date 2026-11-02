@@ -5,4 +5,4 @@ pub mod discover;
 pub mod features;
 mod transport;
 
-pub use transport::{Device, DeviceInfo, Error, Result, enumerate};
+pub use transport::{Device, DeviceInfo, Error, REPLY_LEN, Result, enumerate};

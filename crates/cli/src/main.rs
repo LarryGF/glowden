@@ -6,7 +6,7 @@ use hidpp::features;
 const USAGE: &str = "usage:
   lhub list                                  devices and their HID++ features
   lhub import-ghub <dir>                     copy device pictures/layouts (and the VO!CE engine) from G HUB depots
-  lhub import-voice-presets <settings.json>  copy the Blue VO!CE presets from G HUB's settings
+  lhub import-voice-presets <settings.db|.json>  copy the Blue VO!CE presets from G HUB's settings
   lhub <dev> color RRGGBB
   lhub <dev> breathe RRGGBB [period_ms] [intensity%]
   lhub <dev> cycle [period_ms] [intensity%] [saturation]
@@ -399,7 +399,27 @@ fn import_ghub(root: &std::path::Path) -> CmdResult {
         }
         println!("{model}: {} files -> {}", files.len(), dest.display());
     }
-    import_voice_engine(root)
+    import_voice_engine(root)?;
+    // G HUB's settings (settings.db in %LOCALAPPDATA%\\LGHUB, or an exported settings.json)
+    // carry the VO!CE presets.
+    if let Some(settings) = find_file(root, &["settings.db", "settings.json"]) {
+        import_voice_presets(&settings)?;
+    }
+    Ok(())
+}
+
+fn find_file(dir: &std::path::Path, names: &[&str]) -> Option<std::path::PathBuf> {
+    for e in std::fs::read_dir(dir).ok()?.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            if let Some(f) = find_file(&p, names) {
+                return Some(f);
+            }
+        } else if p.file_name().is_some_and(|n| names.iter().any(|w| n == *w)) {
+            return Some(p);
+        }
+    }
+    None
 }
 
 fn voice_dir() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
@@ -480,7 +500,18 @@ fn import_voice_engine(root: &std::path::Path) -> CmdResult {
 /// G HUB keeps its VO!CE presets as BLUE_VOICE_2_SETTINGS cards in settings.json (exported
 /// from its settings.db). They are copied as-is; the service maps them onto the engine.
 fn import_voice_presets(settings: &std::path::Path) -> CmdResult {
-    let json: serde_json::Value = serde_json::from_slice(&std::fs::read(settings)?)?;
+    let bytes = if settings.extension().is_some_and(|e| e == "db") {
+        // settings.db is SQLite; the newest row of its `data` table is the settings JSON.
+        let out = std::process::Command::new("sqlite3")
+            .arg(settings)
+            .arg("select file from data order by _id desc limit 1")
+            .output()
+            .map_err(|e| format!("reading {} needs the sqlite3 tool: {e}", settings.display()))?;
+        out.stdout
+    } else {
+        std::fs::read(settings)?
+    };
+    let json: serde_json::Value = serde_json::from_slice(&bytes)?;
     let presets: Vec<serde_json::Value> = json["cards"]["cards"]
         .as_array()
         .into_iter()

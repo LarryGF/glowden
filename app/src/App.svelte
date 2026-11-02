@@ -3,10 +3,14 @@
   import { api, type Device } from "./lib/api";
   import DevicePage from "./lib/DevicePage.svelte";
   import Home from "./lib/Home.svelte";
+  import Settings from "./lib/Settings.svelte";
 
   let devices = $state<Device[]>([]);
   let loading = $state(true);
-  let selected = $state<Device | null>(null);
+  let selectedId = $state<string | null>(null);
+  let settings = $state(false);
+  // Looked up in the latest list so battery and charging stay current on the device page.
+  const selected = $derived(devices.find((d) => d.id === selectedId) ?? null);
   let error = $state<string | null>(null);
   let errorTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -27,27 +31,39 @@
     }
   }
 
-  onMount(refresh);
+  onMount(() => {
+    refresh();
+    // Quiet background refresh: battery level, charging, devices coming and going.
+    const timer = setInterval(() => api.listDevices().then((d) => (devices = d)).catch(() => {}), 15000);
+    return () => clearInterval(timer);
+  });
 </script>
 
 <div class="shell">
   <header>
-    {#if selected}
-      <button class="back" onclick={() => (selected = null)} aria-label="Back to devices">←</button>
-      <span class="title">{selected.name}</span>
+    {#if selected || settings}
+      <button class="back" onclick={() => ((selectedId = null), (settings = false))} aria-label="Back to devices">←</button>
+      <span class="title">{settings ? "Settings" : selected?.name}</span>
     {:else}
       <span class="brand"><span class="mark"></span>lhub</span>
       <button class="refresh" onclick={refresh} disabled={loading}>{loading ? "Scanning…" : "Rescan"}</button>
+      <button class="gear" onclick={() => (settings = true)} aria-label="Settings" title="Settings">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+        </svg>
+      </button>
     {/if}
   </header>
 
   <div class="body">
-    {#if selected}
+    {#if settings}
+      <Settings onerror={showError} onchanged={refresh} />
+    {:else if selected}
       {#key selected.id}
         <DevicePage device={selected} onerror={showError} />
       {/key}
     {:else}
-      <Home {devices} {loading} onopen={(d) => (selected = d)} />
+      <Home {devices} {loading} onopen={(d) => (selectedId = d.id)} />
     {/if}
   </div>
 
@@ -62,6 +78,8 @@
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; letter-spacing: 0.02em; }
   .mark { width: 18px; height: 18px; border-radius: 50%; border: 4px solid var(--accent); }
   .refresh { margin-left: auto; }
+  .gear { border: none; background: none; padding: 6px; display: grid; place-items: center; color: var(--text-dim); }
+  .gear:hover { color: var(--text); }
   .back { border: none; background: none; font-size: 20px; padding: 4px 10px; }
   .title { font-weight: 600; }
   .body { min-height: 0; overflow: auto; }

@@ -2,6 +2,7 @@
   import type { Device } from "./api";
   import DeviceVisual from "./DeviceVisual.svelte";
   import LightingViewer from "./LightingViewer.svelte";
+  import BatteryBadge from "./BatteryBadge.svelte";
 
   let { devices, loading, onopen }: { devices: Device[]; loading: boolean; onopen: (d: Device) => void } = $props();
 </script>
@@ -18,7 +19,7 @@
           <button class="open" onclick={() => onopen(d)} aria-label="Open {d.name}">
             <h2>{d.name}</h2>
             <div class="meta">
-              {#if d.battery}<span class:low={d.battery.percent <= 15}>{d.battery.percent}%{d.battery.charging ? " ⚡" : ""}{#if d.battery.hours && !d.battery.charging} · {Math.round(d.battery.hours)} h{/if}</span>{/if}
+              {#if d.battery}<BatteryBadge battery={d.battery} />{/if}
               <span>{d.connection === "LIGHTSPEED" ? "Wireless" : "USB"}</span>
             </div>
             <div class="picture">

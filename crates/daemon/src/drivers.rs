@@ -25,6 +25,8 @@ pub struct Driver {
     /// Directory of the definition file, for paths inside it.
     #[serde(skip)]
     pub dir: PathBuf,
+    #[serde(skip)]
+    pub file: PathBuf,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
@@ -158,6 +160,7 @@ impl Registry {
                 match parsed {
                     Ok(mut d) => {
                         d.dir = dir.clone();
+                        d.file = file.clone();
                         eprintln!("driver: {} from {}", d.name, file.display());
                         for &p in &d.products {
                             by_product.insert(p, d.clone());
@@ -174,7 +177,47 @@ impl Registry {
         d.layout.picture.as_ref().map(|p| d.dir.join(p))
     }
 
+    /// Every loaded definition once (a file can list several products).
+    pub fn all(&self) -> Vec<&Driver> {
+        let mut v: Vec<&Driver> = self.by_product.values().collect();
+        v.sort_by(|a, b| a.file.cmp(&b.file));
+        v.dedup_by(|a, b| a.file == b.file);
+        v
+    }
+
     pub fn for_product(&self, product: u16) -> Option<&Driver> {
         self.by_product.get(&product)
     }
+}
+
+/// Writes a starter definition for a connected device into the user's driver folder.
+pub fn create_starter(name: &str, kind: &str, product: u16) -> Result<PathBuf, String> {
+    let dir = PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?)
+        .join(".local/share/lhub/drivers");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let slug: String = name
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+    let file = dir.join(format!("{slug}.toml"));
+    if file.exists() {
+        return Err(format!("{} already exists", file.display()));
+    }
+    let model = slug.replace('-', "_");
+    let text = format!(
+        "# Starter definition written by lhub. See docs/adding-devices.md for pictures, LED\n\
+         # positions, host-handled buttons and firmware effects.\n\
+         name = \"{name}\"\n\
+         kind = \"{kind}\"\n\
+         products = [0x{product:04x}]\n\
+         # Folder of its pictures in ~/.local/share/lhub/devices/ (G HUB's model name).\n\
+         ghub_model = \"{model}\"\n"
+    );
+    std::fs::write(&file, text).map_err(|e| e.to_string())?;
+    Ok(file)
 }

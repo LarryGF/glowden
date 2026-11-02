@@ -174,7 +174,18 @@ fn run(
                 .collect();
         }
 
-        dpi.poll(&mut found);
+        // Notifications the device sent: button presses, battery changes.
+        let events = found.device.take_events(Duration::ZERO).unwrap_or_default();
+        dpi.handle(&mut found, &events);
+        if let Some((percent, charging)) = devices::battery_event(&mut found.device, &events) {
+            let mut v = view.lock().unwrap();
+            let hours = v.battery.as_ref().and_then(|b| b.hours);
+            v.battery = Some(view::Battery {
+                percent,
+                charging,
+                hours,
+            });
+        }
 
         if last_battery.elapsed() > Duration::from_secs(60) {
             last_battery = Instant::now();
@@ -572,13 +583,10 @@ impl DpiButtons {
         }
     }
 
-    fn poll(&mut self, found: &mut Found) {
+    fn handle(&mut self, found: &mut Found, events: &[[u8; hidpp::REPLY_LEN]]) {
         let Some(index) = self.spy else { return };
-        let Ok(events) = found.device.take_events(Duration::ZERO) else {
-            return;
-        };
         for msg in events {
-            let Some(mask) = devices::buttons::pressed(index, &msg) else {
+            let Some(mask) = devices::buttons::pressed(index, msg) else {
                 continue;
             };
             let pressed = mask & !self.held;

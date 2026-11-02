@@ -9,6 +9,8 @@
  *              [f OFF VALUE]... [b OFF VALUE]... [u OFF VALUE]...
  *
  * f/b/u set a float, byte or u32 in the parameter block (offsets in hex, see docs/voice.md).
+ * With --process IN.wav OUT.wav it processes a recording instead (48 kHz mono float WAV, as
+ * pw-record writes it with --format f32), for comparing presets on the same take.
  */
 #include "pe.h"
 
@@ -134,6 +136,73 @@ static const struct spa_pod *mono_format(struct spa_pod_builder *b)
                                                                .channels = 1, .position = {SPA_AUDIO_CHANNEL_MONO}));
 }
 
+/* Offline: run a 48 kHz mono float WAV through the engine. The output is shifted by the
+ * engine's latency so it lines up with the input. */
+static int process_file(void *inst, const char *in_path, const char *out_path)
+{
+    FILE *in = fopen(in_path, "rb");
+    if (!in) {
+        fprintf(stderr, "lhub-voice: cannot open %s\n", in_path);
+        return 1;
+    }
+    uint8_t head[12];
+    if (fread(head, 1, 12, in) != 12 || memcmp(head, "RIFF", 4) || memcmp(head + 8, "WAVE", 4)) {
+        fprintf(stderr, "lhub-voice: %s is not a WAV file\n", in_path);
+        return 1;
+    }
+    uint32_t len = 0, rate = 0;
+    uint16_t format = 0, channels = 0;
+    char id[4];
+    while (fread(id, 1, 4, in) == 4 && fread(&len, 4, 1, in) == 1) {
+        if (!memcmp(id, "fmt ", 4)) {
+            uint8_t fmt[64] = {0};
+            if (fread(fmt, 1, len < sizeof fmt ? len : sizeof fmt, in) == 0) break;
+            if (len > sizeof fmt) fseek(in, len - sizeof fmt, SEEK_CUR);
+            memcpy(&format, fmt, 2);
+            memcpy(&channels, fmt + 2, 2);
+            memcpy(&rate, fmt + 4, 4);
+        } else if (!memcmp(id, "data", 4)) {
+            break;
+        } else {
+            fseek(in, len + (len & 1), SEEK_CUR);
+        }
+    }
+    if (memcmp(id, "data", 4) || format != 3 || channels != 1 || rate != RATE) {
+        fprintf(stderr, "lhub-voice: %s must be 48 kHz mono float\n", in_path);
+        return 1;
+    }
+    size_t n = len / sizeof(float), latency = 1280;
+    float *samples = calloc(n + latency + BLOCK, sizeof(float));
+    n = fread(samples, sizeof(float), n, in);
+    fclose(in);
+    float *result = calloc(n + latency + BLOCK, sizeof(float));
+    for (size_t at = 0; at < n + latency; at += BLOCK) {
+        memcpy(st.in, samples + at, BLOCK * sizeof(float));
+        if (st.process(inst, (float *[]){st.in, st.out})) return 1;
+        memcpy(result + at, st.out, BLOCK * sizeof(float));
+    }
+    FILE *out = fopen(out_path, "wb");
+    if (!out) return 1;
+    uint32_t bytes = n * sizeof(float), riff = 36 + bytes, fmt_len = 16, byte_rate = RATE * 4;
+    uint16_t fmt_tag = 3, ch = 1, align = 4, bits = 32;
+    uint32_t r = RATE;
+    fwrite("RIFF", 1, 4, out);
+    fwrite(&riff, 4, 1, out);
+    fwrite("WAVEfmt ", 1, 8, out);
+    fwrite(&fmt_len, 4, 1, out);
+    fwrite(&fmt_tag, 2, 1, out);
+    fwrite(&ch, 2, 1, out);
+    fwrite(&r, 4, 1, out);
+    fwrite(&byte_rate, 4, 1, out);
+    fwrite(&align, 2, 1, out);
+    fwrite(&bits, 2, 1, out);
+    fwrite("data", 1, 4, out);
+    fwrite(&bytes, 4, 1, out);
+    fwrite(result + latency, sizeof(float), n, out);
+    fclose(out);
+    return 0;
+}
+
 int lhub_voice_main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -141,6 +210,7 @@ int lhub_voice_main(int argc, char **argv)
         return 2;
     }
     const char *target = NULL, *name = "lhub-bluevoice", *description = "Blue VO!CE";
+    const char *process_in = NULL, *process_out = NULL;
     static cv2_config cfg = {RATE, BLOCK, 1, RATE, BLOCK, 2, {0}};
 
     pe_image *img = pe_load(argv[1]);
@@ -162,6 +232,10 @@ int lhub_voice_main(int argc, char **argv)
         if (!strcmp(argv[i], "--target") && i + 1 < argc) target = argv[++i];
         else if (!strcmp(argv[i], "--name") && i + 1 < argc) name = argv[++i];
         else if (!strcmp(argv[i], "--description") && i + 1 < argc) description = argv[++i];
+        else if (!strcmp(argv[i], "--process") && i + 2 < argc) {
+            process_in = argv[++i];
+            process_out = argv[++i];
+        }
         else if (strchr("fbu", argv[i][0]) && !argv[i][1] && i + 2 < argc) {
             long off = strtol(argv[i + 1], NULL, 16);
             if (off < 0 || off + 4 > (long)sizeof cfg.params) {
@@ -198,6 +272,7 @@ int lhub_voice_main(int argc, char **argv)
     }
     st.in = aligned_alloc(32, BLOCK * sizeof(float));
     st.out = aligned_alloc(32, BLOCK * sizeof(float));
+    if (process_in) return process_file(st.inst, process_in, process_out);
 
     pw_init(&argc, &argv);
     st.loop = pw_main_loop_new(NULL);

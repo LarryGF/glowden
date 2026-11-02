@@ -125,6 +125,32 @@ pub struct VoiceConfig {
 pub struct Config {
     /// Keyed by stable device id ("<usb port>:<product>").
     pub devices: BTreeMap<String, DeviceConfig>,
+    #[serde(default)]
+    pub app: AppSettings,
+}
+
+/// Settings of lhub itself (the app's Settings page).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct AppSettings {
+    /// Folders with G HUB data (depots, settings.db) to import pictures, the VO!CE engine
+    /// and presets from.
+    #[serde(default)]
+    pub ghub_paths: Vec<String>,
+    #[serde(default = "yes")]
+    pub low_battery_alert: bool,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        AppSettings {
+            ghub_paths: Vec::new(),
+            low_battery_alert: true,
+        }
+    }
+}
+
+fn yes() -> bool {
+    true
 }
 
 fn path() -> PathBuf {

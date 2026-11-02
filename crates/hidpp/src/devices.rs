@@ -138,9 +138,32 @@ pub mod mic {
 }
 
 /// Unified battery (0x1004) function 1: [state of charge %, level flags, charging status, ...].
+/// (percent, charging) from unified battery `0x1004` fn1: [percent, level, status, external
+/// power]; status 1–3 = charging (slow/fast/wireless).
 pub fn battery(dev: &mut Device) -> Result<(u8, bool)> {
+    if dev.is_centurion() {
+        // Headsets: centurion 0x0104 fn0 getBatteryStatus = [percent, ?, status]; the
+        // percent was seen draining on the G522, status 0 while unplugged.
+        let r = dev.call(CENTURION_BATTERY, 0, &[])?;
+        return Ok((r[4], r[6] != 0));
+    }
     let r = dev.call(crate::features::UNIFIED_BATTERY, 1, &[])?;
     Ok((r[4], matches!(r[6], 1..=3)))
+}
+
+pub const CENTURION_BATTERY: u16 = 0x0104;
+
+/// The newest battery change among device notifications (`0x1004` event 0, same layout as fn1).
+pub fn battery_event(dev: &mut Device, events: &[[u8; crate::REPLY_LEN]]) -> Option<(u8, bool)> {
+    if events.is_empty() {
+        return None;
+    }
+    let index = dev.feature(crate::features::UNIFIED_BATTERY).ok()?;
+    events
+        .iter()
+        .rev()
+        .find(|m| m[2] == index && m[3] >> 4 == 0)
+        .map(|m| (m[4], matches!(m[6], 1..=3)))
 }
 
 /// Effect ids from RGB effects function 0; the index of an effect differs per device.

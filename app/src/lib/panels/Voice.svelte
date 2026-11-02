@@ -27,6 +27,53 @@
   }
 
   const ready = $derived(state?.engine && (state?.presets.length ?? 0) > 0);
+
+  /** Our own wording for G HUB's preset names: "<placement> - <character>". */
+  function describe(name: string): string {
+    const [place, character] = name.split(" - ");
+    const where =
+      place === "Desk" ? "Mic on the desk, further from your mouth: more gain." :
+      place === "Boom Arm" ? "Mic on a boom arm, close to your mouth." : "";
+    const how =
+      character === "Natural" ? "Lightest processing, closest to the mic's own sound." :
+      character === "Classic" ? "All-round cleanup with a balanced tone." :
+      character === "More Bass" ? "Warmer and fuller: bass up, muddy mids down." :
+      character === "Broadcaster" ? "Radio voice: strong compression for an even, up-front level." : "";
+    return [how, where].filter(Boolean).join(" ");
+  }
+
+  const db = (v: number | null | undefined) => (v == null ? "–" : `${v > 0 ? "+" : ""}${v} dB`);
+
+  let recording = $state(0);
+  let playing = $state<string | null>(null);
+
+  async function record() {
+    recording = 5;
+    const tick = setInterval(() => (recording = Math.max(0, recording - 1)), 1000);
+    try {
+      await api.voiceTestRecord(device.id, 5);
+      if (state) state.has_test = true;
+    } catch (e) {
+      onerror(e);
+    } finally {
+      clearInterval(tick);
+      recording = 0;
+    }
+  }
+
+  async function play(preset: string | null) {
+    try {
+      await api.voiceTestPlay(preset);
+      playing = preset ?? "original";
+    } catch (e) {
+      onerror(e);
+    }
+  }
+
+  async function stopPlaying() {
+    playing = null;
+    await api.voiceTestStop().catch(onerror);
+  }
 </script>
 
 {#if state}
@@ -56,12 +103,38 @@
         <h3>Presets</h3>
         <div class="presets">
           {#each state.presets as name}
+            {@const d = state.details[name]}
             <button
+              class="preset"
               class:active={state.preset === name}
               disabled={busy}
-              onclick={() => apply(state!.enabled, name)}>{name}</button
+              onclick={() => apply(state!.enabled, name)}
             >
+              <span class="name">{name}</span>
+              <span class="desc">{describe(name)}</span>
+              {#if d}
+                <span class="chips">
+                  <span title="Noise reduction">Noise {db(d.noise_reduction)}</span>
+                  <span title="Equalizer bass / mids / treble">EQ {db(d.bass)} / {db(d.mids)} / {db(d.treble)}</span>
+                  {#if d.compression}<span title="Compression ratio">{d.compression}:1</span>{/if}
+                  {#if d.input_gain != null}<span title="Input gain">Gain {Math.round(d.input_gain * 100)}</span>{/if}
+                </span>
+              {/if}
+            </button>
           {/each}
+        </div>
+      </section>
+
+      <section class="test">
+        <h3>Test</h3>
+        <p class="note">Record a few seconds, then compare the original with any preset on the same take. Use headphones.</p>
+        <div class="buttons">
+          <button onclick={record} disabled={recording > 0}>{recording ? `Recording… ${recording}` : "Record 5 s"}</button>
+          <button onclick={() => play(null)} disabled={!state.has_test || recording > 0} class:active={playing === "original"}>Play original</button>
+          <button onclick={() => play(state!.preset)} disabled={!state.has_test || recording > 0 || !state.preset} class:active={playing !== null && playing !== "original"}>
+            Play with {state.preset ?? "preset"}
+          </button>
+          <button onclick={stopPlaying} disabled={!playing}>Stop</button>
         </div>
       </section>
 
@@ -90,9 +163,16 @@
   .switch.on { background: var(--text); color: var(--bg); border-color: transparent; }
   section { display: flex; flex-direction: column; gap: 12px; }
   h3 { margin: 0; font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; }
-  .presets { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-  .presets button { text-align: left; padding: 10px 12px; }
-  .presets button.active { border-color: var(--accent); color: var(--accent); background: var(--bg-hover); }
+  .presets { display: flex; flex-direction: column; gap: 8px; }
+  .preset { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: 10px 12px; }
+  .preset.active { border-color: var(--accent); background: var(--bg-hover); }
+  .preset.active .name { color: var(--accent); }
+  .name { font-weight: 600; }
+  .desc { color: var(--text-dim); font-size: 12px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips span { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: var(--bg); color: var(--text-dim); }
+  .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+  .buttons button.active { border-color: var(--accent); color: var(--accent); }
   .status { margin: 0; color: var(--warn); }
   .status.ok { color: var(--accent); }
   .note { margin: 0; color: var(--text-faint); font-size: 12px; line-height: 1.5; }

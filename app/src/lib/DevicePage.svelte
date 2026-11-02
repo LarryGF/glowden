@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Device } from "./api";
   import LightingViewer from "./LightingViewer.svelte";
+  import BatteryBadge from "./BatteryBadge.svelte";
   import Info from "./panels/Info.svelte";
   import Lighting from "./panels/Lighting.svelte";
   import Microphone from "./panels/Microphone.svelte";
@@ -86,14 +87,12 @@
     <div class="status">
       <span class="connection">{device.connection}</span>
       {#if device.battery}
-        <span class="battery" class:low={device.battery.percent <= 15}>
-          {device.battery.percent}%{device.battery.charging ? " · charging" : ""}{#if device.battery.hours && !device.battery.charging} · approx {Math.round(device.battery.hours)} h{/if}
-        </span>
+        <BatteryBadge battery={device.battery} detailed />
       {/if}
     </div>
     <div class="visual">
       {#key device.id}
-        <LightingViewer {device} live={active === "lighting"} />
+        <LightingViewer {device} />
       {/key}
     </div>
   </section>
@@ -110,6 +109,5 @@
   .settings h2 { margin: 0 0 20px; font-size: 20px; letter-spacing: 0.03em; text-transform: uppercase; }
   .stage { display: grid; grid-template-rows: auto 1fr; min-width: 0; }
   .status { display: flex; justify-content: flex-end; gap: 14px; padding: 22px 34px 0; color: var(--text-dim); font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; }
-  .battery.low { color: var(--warn); }
   .visual { min-height: 0; padding: 10px 40px 40px; color: var(--text-dim); }
 </style>

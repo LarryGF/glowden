@@ -8,6 +8,24 @@ export type VoiceState = {
   preset: string | null;
   running: boolean;
   error: string | null;
+  has_test: boolean;
+  details: Record<string, {
+    noise_reduction: number | null;
+    bass: number;
+    mids: number;
+    treble: number;
+    compression: number | null;
+    de_esser: number | null;
+    boost: number | null;
+    input_gain: number | null;
+  }>;
+};
+
+export type AppInfo = {
+  settings: { ghub_paths: string[]; low_battery_alert: boolean };
+  autostart: boolean;
+  drivers: { name: string; file: string; products: string[] }[];
+  devices: { id: string; name: string; product: string; kind: string; driver: string | null }[];
 };
 
 export type Kind = "microphone" | "headset" | "keyboard" | "mouse" | "device";
@@ -90,6 +108,14 @@ export const api = {
   setVoice: (id: string, enabled: boolean, preset: string | null) =>
     request<VoiceState>({ cmd: "set_voice", id, enabled, preset }),
   getMuted: (id: string) => request<boolean>({ cmd: "get_muted", id }),
+  voiceTestRecord: (id: string, seconds: number) => request<void>({ cmd: "voice_test_record", id, seconds }),
+  voiceTestPlay: (preset: string | null) => request<void>({ cmd: "voice_test_play", preset }),
+  voiceTestStop: () => request<void>({ cmd: "voice_test_stop" }),
+  appSettings: () => request<AppInfo>({ cmd: "app_settings" }),
+  setAppSettings: (settings: AppInfo["settings"]) => request<AppInfo>({ cmd: "set_app_settings", settings }),
+  setAutostart: (on: boolean) => request<boolean>({ cmd: "set_autostart", on }),
+  importGhub: (path: string) => request<string>({ cmd: "import_ghub", path }),
+  createDriver: (id: string) => request<string>({ cmd: "create_driver", id }),
   getConfig: (id: string) => request<DeviceConfig>({ cmd: "get_config", id }),
   setLighting: (id: string, lighting: Lighting) => request<void>({ cmd: "set_lighting", id, lighting }),
   setBrightness: (id: string, percent: number) => request<void>({ cmd: "set_brightness", id, percent }),

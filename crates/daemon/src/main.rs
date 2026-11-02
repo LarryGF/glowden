@@ -1,6 +1,7 @@
 //! lhubd: owns the devices, keeps their configuration applied, and serves the UI over a
 //! Unix socket with one JSON request/response per line.
 
+mod app;
 mod battery;
 mod config;
 mod drivers;
@@ -20,7 +21,7 @@ use std::time::Duration;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use config::{Config, DeviceConfig, Lighting, VoiceConfig};
+use config::{AppSettings, Config, DeviceConfig, Lighting, VoiceConfig};
 use worker::{Cmd, Handle};
 
 struct State {
@@ -92,6 +93,7 @@ fn manage(shared: Shared) {
     // Nodes that didn't answer, and when; they're only re-probed every 30 s so a switched-off
     // headset doesn't slow down noticing everything else.
     let mut silent: HashMap<String, std::time::Instant> = HashMap::new();
+    let mut warned = std::collections::HashSet::new();
     loop {
         {
             let mut st = shared.0.lock().unwrap();
@@ -123,6 +125,23 @@ fn manage(shared: Shared) {
                     st.config.devices.entry(id).or_default().dpi_level = Some(level);
                 }
                 st.config.save();
+            }
+            if st.config.app.low_battery_alert {
+                for (id, h) in &st.workers {
+                    let v = h.view.lock().unwrap();
+                    let Some(b) = &v.battery else { continue };
+                    // Once per discharge: re-armed after charging past 20 %.
+                    if b.percent <= 15 && !b.charging {
+                        if warned.insert(id.clone()) {
+                            app::notify(
+                                &format!("{} battery low", v.name),
+                                &format!("{} % left", b.percent),
+                            );
+                        }
+                    } else if b.charging || b.percent > 20 {
+                        warned.remove(id);
+                    }
+                }
             }
         }
         let known: Vec<String> = shared.0.lock().unwrap().workers.keys().cloned().collect();
@@ -214,6 +233,27 @@ enum Request {
     VoiceState {
         id: String,
     },
+    VoiceTestRecord {
+        id: String,
+        seconds: u64,
+    },
+    VoiceTestPlay {
+        preset: Option<String>,
+    },
+    VoiceTestStop,
+    AppSettings,
+    SetAppSettings {
+        settings: AppSettings,
+    },
+    SetAutostart {
+        on: bool,
+    },
+    ImportGhub {
+        path: String,
+    },
+    CreateDriver {
+        id: String,
+    },
     SetVoice {
         id: String,
         enabled: bool,
@@ -292,6 +332,40 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
         Request::SetPower { id, on } => update(shared, &id, |c| c.power = Some(on)),
         Request::SyncLighting { from } => sync_lighting(shared, &from),
         Request::VoiceState { id } => Ok(voice_state(&mut lock.lock().unwrap(), &id)),
+        Request::VoiceTestRecord { id, seconds } => {
+            // Recorded without holding the state lock; the mic's PipeWire node does the work.
+            let def =
+                voice_def(&lock.lock().unwrap(), &id).ok_or("this device has no Blue VO!CE")?;
+            voice::record_test(&def, seconds).map(|_| Value::Null)
+        }
+        Request::VoiceTestPlay { preset } => {
+            let settings = match preset {
+                Some(name) => Some(
+                    voice::presets()
+                        .into_iter()
+                        .find(|(n, _)| *n == name)
+                        .map(|(_, s)| s)
+                        .ok_or("no such preset")?,
+                ),
+                None => None,
+            };
+            let mut st = lock.lock().unwrap();
+            st.voice.play_test(settings.as_ref()).map(|_| Value::Null)
+        }
+        Request::VoiceTestStop => {
+            lock.lock().unwrap().voice.stop_test();
+            Ok(Value::Null)
+        }
+        Request::AppSettings => Ok(app_settings(&lock.lock().unwrap())),
+        Request::SetAppSettings { settings } => {
+            let mut st = lock.lock().unwrap();
+            st.config.app = settings;
+            st.config.save();
+            Ok(app_settings(&st))
+        }
+        Request::SetAutostart { on } => app::set_autostart(on).map(|_| json!(app::autostart())),
+        Request::ImportGhub { path } => app::import_ghub(&path).map(|t| json!(t)),
+        Request::CreateDriver { id } => create_driver(shared, &id),
         Request::SetVoice {
             id,
             enabled,
@@ -463,8 +537,15 @@ fn voice_state(st: &mut State, id: &str) -> Value {
         .and_then(|c| c.voice.clone())
         .unwrap_or_default();
     let (running, error) = st.voice.status(id);
-    let presets: Vec<String> = voice::presets().into_iter().map(|(n, _)| n).collect();
+    let all = voice::presets();
+    let presets: Vec<String> = all.iter().map(|(n, _)| n.clone()).collect();
+    let details: serde_json::Map<String, Value> = all
+        .iter()
+        .map(|(n, s)| (n.clone(), voice::summary(s)))
+        .collect();
     json!({
+        "details": details,
+        "has_test": voice::has_test(),
         "supported": voice_def(st, id).is_some(),
         "engine": voice::engine().is_some(),
         "presets": presets,
@@ -504,4 +585,55 @@ fn set_voice(shared: &Shared, id: &str, cfg: VoiceConfig) -> Result<Value, Strin
         ask(shared, id, |tx| Cmd::SetGain(g, tx))?;
     }
     Ok(state)
+}
+
+fn app_settings(st: &State) -> Value {
+    let drivers: Vec<Value> = st
+        .drivers
+        .all()
+        .into_iter()
+        .map(|d| {
+            json!({
+                "name": d.name,
+                "file": d.file.display().to_string(),
+                "products": d.products.iter().map(|p| format!("{p:04x}")).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    let devices: Vec<Value> = st
+        .workers
+        .iter()
+        .map(|(id, h)| {
+            let v = h.view.lock().unwrap();
+            let product = u16::from_str_radix(v.product.rsplit(':').next().unwrap_or(""), 16).ok();
+            let driver = product
+                .and_then(|p| st.drivers.for_product(p))
+                .map(|d| d.file.display().to_string());
+            json!({ "id": id, "name": v.name, "product": v.product, "kind": v.kind, "driver": driver })
+        })
+        .collect();
+    json!({
+        "settings": st.config.app,
+        "autostart": app::autostart(),
+        "drivers": drivers,
+        "devices": devices,
+    })
+}
+
+/// Writes a starter definition for a connected device without one, reloads definitions and
+/// reconnects the device so it picks the new one up.
+fn create_driver(shared: &Shared, id: &str) -> Result<Value, String> {
+    let mut st = shared.0.lock().unwrap();
+    let (name, kind, product) = {
+        let h = st.workers.get(id).ok_or("no such device")?;
+        let v = h.view.lock().unwrap();
+        let product = u16::from_str_radix(v.product.rsplit(':').next().unwrap_or(""), 16)
+            .map_err(|e| e.to_string())?;
+        (v.name.clone(), v.kind, product)
+    };
+    let file = drivers::create_starter(&name, kind, product)?;
+    st.drivers = drivers::Registry::load();
+    // Dropping the worker closes the device; the manager finds it again with the new file.
+    st.workers.remove(id);
+    Ok(json!(file.display().to_string()))
 }

@@ -105,7 +105,7 @@ pub fn build(f: &mut Found, driver: Option<&crate::drivers::Driver>) -> DeviceVi
         caps.push("assignments");
     }
 
-    let battery = has(features::UNIFIED_BATTERY)
+    let battery = (has(features::UNIFIED_BATTERY) || centurion && has(devices::CENTURION_BATTERY))
         .then(|| devices::battery(dev).ok())
         .flatten()
         .map(|(percent, charging)| Battery {
