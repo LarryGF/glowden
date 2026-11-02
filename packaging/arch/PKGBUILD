@@ -12,6 +12,8 @@ optdepends=('libayatana-appindicator: tray icon'
             'xdg-desktop-portal: screen sampler lighting effect')
 makedepends=('cargo' 'pnpm' 'nodejs')
 install=lhub.install
+# Rust links the C helpers itself and can't read GCC LTO objects.
+options=('!lto')
 
 build() {
   cd "$startdir/../../app"
