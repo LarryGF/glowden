@@ -22,6 +22,13 @@ track what is done, verified, and next.
 - Test writes by writing back the value the device already has first.
 - Prefer reads; when a write is needed on the user's hardware, say what will visibly change.
 
+## Building
+
+- Build the app with `cd app && pnpm tauri build`. A plain `cargo build` also rebuilds
+  `target/release/lhub-app`, but without the `custom-protocol` feature, so the window loads
+  the dev server (`localhost:1420`) and shows "Connection refused". After a workspace
+  `cargo build`, run `pnpm tauri build` again.
+
 ## Testing against hardware
 
 - `target/release/lhub list` and `LHUB_DEBUG=1` frame traces are the main tools.
