@@ -10,3 +10,4 @@ tools/voice-probes/dump_defaults
 tools/voice-probes/field_probe
 tools/voice-probes/probe_effects
 tools/voice-probes/stage_probe
+/dist

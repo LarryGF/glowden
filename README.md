@@ -1,12 +1,14 @@
-# lhub
+# LHUB
 
-Native Linux control for Logitech G peripherals: lighting, sensitivity, microphone and
-headset settings, kept applied by a background service, with a desktop app in the spirit of
-G HUB. No Wine, no Windows components at runtime except the optional Blue VO!CE engine,
-which runs from your own G HUB copy through a small native loader.
+An open device hub for Logitech G peripherals on Linux: lighting, buttons, DPI,
+microphone and headset settings, kept applied by a background service, with a desktop app.
+No Wine.
 
-Protocols were worked out from USB captures of G HUB, its agent and UI bundles, and the
-devices' own feature lists. No Logitech code, pictures or presets are part of this repo.
+LHUB is a framework. It ships its own code and device definitions (protocol facts); you
+bring the assets. Pictures, sound clips, VO!CE presets and the optional Blue VO!CE engine
+are imported at runtime from your own G HUB copy (`lhub import-ghub`), and nothing from
+Logitech or DTS is part of this repo or its packages. LHUB is not affiliated with Logitech;
+see [`NOTICE.md`](NOTICE.md).
 
 ## Supported hardware
 
@@ -23,14 +25,15 @@ Current state and known issues: [`docs/STATUS.md`](docs/STATUS.md).
 ## Build
 
 Requires the Rust toolchain (pinned by `rust-toolchain.toml`), Node with pnpm, and the
-WebKitGTK 4.1, GTK 3 and PipeWire development packages.
+WebKitGTK 4.1, GTK 3, PipeWire, libsystemd and D-Bus development packages.
 
 ```sh
-cargo build --release -p lhubd -p lhub-cli   # service and CLI
-cd app && pnpm install && pnpm tauri build   # desktop app
+cargo build --release -p lhubd -p lhub-cli -p lhub-voice -p lhub-sampler
+cd app && pnpm install && pnpm tauri build   # desktop app (after the cargo build)
 ```
 
-Binaries land in `target/release/`: `lhub-app`, `lhubd`, `lhub`.
+Binaries land in `target/release/`: `lhub-app`, `lhubd`, `lhub`, `lhub-voice` (VO!CE host),
+`lhub-sampler` (screen sampler).
 
 ## Install
 
@@ -43,8 +46,14 @@ sudo udevadm control --reload-rules
 sudo udevadm trigger --subsystem-match=hidraw --subsystem-match=input --action=change
 ```
 
-On Arch, `packaging/arch/PKGBUILD` installs the binaries, the rule and a systemd user unit:
-`makepkg -si` in `packaging/arch`, then `systemctl --user enable --now lhubd`.
+Packages install all of that (binaries, rule, systemd user unit, desktop entry):
+
+- **Arch**: `makepkg -si` in `packaging/arch`.
+- **Debian 12+ / Ubuntu 22.04+**: `packaging/deb/build.sh` builds `dist/lhub_<version>_amd64.deb`
+  in an Ubuntu 22.04 container (needs Docker); install it with `sudo apt install ./dist/lhub_*.deb`.
+
+Then start the service for your user: `systemctl --user enable --now lhubd` (the app also
+starts it when it isn't running).
 
 ## Use
 
@@ -85,3 +94,9 @@ See [`docs/voice.md`](docs/voice.md). The engine DLL comes from your own G HUB i
 | `packaging` | udev rule, systemd unit, Arch package |
 | `tools/voice-probes` | Offline experiments against the VO!CE engine |
 | `docs` | Feature inventory, status, protocol notes |
+
+## License
+
+LHUB is licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at
+your option. Files you import from G HUB stay under Logitech's and DTS's terms; see
+[`NOTICE.md`](NOTICE.md).

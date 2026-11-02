@@ -5,4 +5,4 @@ members = ["crates/hidpp", "crates/lighting", "crates/daemon", "crates/cli", "cr
 [workspace.package]
 edition = "2024"
 version = "0.1.0"
-license = "MIT"
+license = "MIT OR Apache-2.0"

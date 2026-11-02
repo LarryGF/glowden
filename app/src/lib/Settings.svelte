@@ -160,7 +160,7 @@
 
     <section class="card">
       <h2>Backups</h2>
-      <p class="note">A backup is a copy of all lhub settings: devices, profiles and these app settings.</p>
+      <p class="note">A backup is a copy of all LHUB settings: devices, profiles and these app settings.</p>
       <ul class="paths">
         {#each backups as b}
           <li>
@@ -178,7 +178,7 @@
     <section class="card">
       <h2>App</h2>
       <label class="row">
-        <span>Start the lhub service when you log in</span>
+        <span>Start the LHUB service when you log in</span>
         <button class="switch" class:on={info.autostart} onclick={() => autostart(!info!.autostart)}>{info.autostart ? "On" : "Off"}</button>
       </label>
       <label class="row">

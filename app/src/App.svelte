@@ -60,7 +60,7 @@
         </button>
       {/if}
     {:else}
-      <span class="brand"><span class="mark"></span>lhub</span>
+      <span class="brand"><span class="mark"></span>LHUB</span>
       <button class="profile" onclick={() => (profilesPage = true)}>Profile: {activeProfile ?? "Default"}</button>
       <button class="refresh" onclick={refresh} disabled={loading}>{loading ? "Scanning…" : "Rescan"}</button>
       <button class="gear" onclick={() => (settings = true)} aria-label="Settings" title="Settings">

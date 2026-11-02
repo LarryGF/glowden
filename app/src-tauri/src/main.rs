@@ -78,7 +78,7 @@ fn tray_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::W
     menu.append(&MenuItem::with_id(
         app,
         "open",
-        "Open lhub",
+        "Open LHUB",
         true,
         None::<&str>,
     )?)?;
@@ -174,7 +174,7 @@ fn main() {
             });
             Ok(())
         })
-        // Closing the window keeps lhub in the tray, as G HUB does; Quit is in the tray menu.
+        // Closing the window keeps LHUB in the tray, as G HUB does; Quit is in the tray menu.
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event
                 && TRAY.load(std::sync::atomic::Ordering::Relaxed)

@@ -1,6 +1,6 @@
 post_install() {
   udevadm control --reload-rules
-  udevadm trigger --subsystem-match=hidraw --subsystem-match=input --action=change
+  udevadm trigger --subsystem-match=hidraw --subsystem-match=input --subsystem-match=misc --action=change
   echo "Start the device service for your user with: systemctl --user enable --now lhubd"
 }
 

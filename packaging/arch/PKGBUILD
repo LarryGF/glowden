@@ -2,10 +2,14 @@
 pkgname=lhub
 pkgver=0.1.0
 pkgrel=1
-pkgdesc="Native Linux control for Logitech G devices"
+pkgdesc="LHUB: open device hub for Logitech G peripherals (lighting, buttons, DPI, microphone)"
 arch=('x86_64')
-license=('MIT')
-depends=('webkit2gtk-4.1' 'gtk3' 'pipewire' 'systemd-libs')
+license=('MIT OR Apache-2.0')
+depends=('webkit2gtk-4.1' 'gtk3' 'pipewire' 'systemd-libs' 'dbus' 'libpulse' 'curl')
+optdepends=('libayatana-appindicator: tray icon'
+            'libnotify: low-battery and lock-key notifications'
+            'sqlite: importing settings from a G HUB settings.db'
+            'xdg-desktop-portal: screen sampler lighting effect')
 makedepends=('rustup' 'pnpm' 'nodejs')
 install=lhub.install
 
@@ -28,4 +32,8 @@ package() {
   install -Dm644 -t "$pkgdir/usr/share/lhub/drivers/pictures" "$root"/drivers/pictures/*
   install -Dm644 "$root/packaging/udev/70-lhub.rules" "$pkgdir/usr/lib/udev/rules.d/70-lhub.rules"
   install -Dm644 "$root/packaging/systemd/lhubd.service" "$pkgdir/usr/lib/systemd/user/lhubd.service"
+  install -Dm644 "$root/packaging/linux/lhub.desktop" "$pkgdir/usr/share/applications/lhub.desktop"
+  install -Dm644 "$root/app/src-tauri/icons/icon.png" "$pkgdir/usr/share/icons/hicolor/256x256/apps/lhub.png"
+  install -Dm644 -t "$pkgdir/usr/share/licenses/$pkgname" "$root/LICENSE-MIT" "$root/LICENSE-APACHE"
+  install -Dm644 -t "$pkgdir/usr/share/doc/$pkgname" "$root/README.md" "$root/NOTICE.md"
 }

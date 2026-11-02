@@ -1,0 +1,40 @@
+{
+  "bundle": {
+    "active": true,
+    "targets": ["deb"],
+    "icon": ["icons/icon.png"],
+    "category": "Utility",
+    "shortDescription": "Open device hub for Logitech G peripherals",
+    "longDescription": "LHUB configures Logitech G keyboards, mice, headsets and microphones on Linux: lighting, buttons, DPI and microphone settings, kept applied by a background service. Not affiliated with Logitech.",
+    "license": "MIT OR Apache-2.0",
+    "linux": {
+      "deb": {
+        "section": "utils",
+        "depends": [
+          "libpipewire-0.3-0", "pipewire-bin", "pulseaudio-utils", "libdbus-1-3",
+          "libsystemd0", "curl"
+        ],
+        "recommends": [
+          "libnotify-bin", "sqlite3", "libayatana-appindicator3-1", "xdg-desktop-portal"
+        ],
+        "desktopTemplate": "../../packaging/linux/lhub.desktop",
+        "postInstallScript": "../../packaging/deb/postinst",
+        "postRemoveScript": "../../packaging/deb/postrm",
+        "files": {
+          "/usr/bin/lhubd": "../../target/release/lhubd",
+          "/usr/bin/lhub": "../../target/release/lhub",
+          "/usr/bin/lhub-voice": "../../target/release/lhub-voice",
+          "/usr/bin/lhub-sampler": "../../target/release/lhub-sampler",
+          "/usr/share/lhub/drivers": "../../drivers",
+          "/usr/lib/udev/rules.d/70-lhub.rules": "../../packaging/udev/70-lhub.rules",
+          "/usr/lib/systemd/user/lhubd.service": "../../packaging/systemd/lhubd.service",
+          "/usr/share/icons/hicolor/256x256/apps/lhub.png": "icons/icon.png",
+          "/usr/share/doc/lhub/LICENSE-MIT": "../../LICENSE-MIT",
+          "/usr/share/doc/lhub/LICENSE-APACHE": "../../LICENSE-APACHE",
+          "/usr/share/doc/lhub/NOTICE.md": "../../NOTICE.md",
+          "/usr/share/doc/lhub/README.md": "../../README.md"
+        }
+      }
+    }
+  }
+}

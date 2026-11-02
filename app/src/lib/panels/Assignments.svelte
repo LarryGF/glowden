@@ -212,7 +212,7 @@
 {#if info}
   <div class="panel">
     {#if info.uinput}
-      <p class="warn">{info.uinput}. Assigned keys and buttons can't be sent until lhub can use /dev/uinput (see packaging/udev).</p>
+      <p class="warn">{info.uinput}. Assigned keys and buttons can't be sent until LHUB can use /dev/uinput (see packaging/udev).</p>
     {/if}
 
     <div class="detect">
@@ -312,7 +312,7 @@
           <button class="primary" onclick={save}>Save</button>
         </div>
         <p class="note">
-          Assigned buttons stop sending their normal click; lhub performs the action instead, while
+          Assigned buttons stop sending their normal click; LHUB performs the action instead, while
           the service runs.
         </p>
       </section>

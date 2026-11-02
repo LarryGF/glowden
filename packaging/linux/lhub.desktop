@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=LHUB
+GenericName=Peripheral settings
+Comment=Lighting, buttons, DPI and microphone settings for Logitech G devices
+Exec=lhub-app
+Icon=lhub
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=logitech;keyboard;mouse;headset;microphone;rgb;lighting;dpi;
+StartupWMClass=lhub-app

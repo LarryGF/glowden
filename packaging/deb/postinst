@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+if command -v udevadm >/dev/null 2>&1; then
+  udevadm control --reload-rules || true
+  udevadm trigger --subsystem-match=hidraw --subsystem-match=input --subsystem-match=misc --action=change || true
+fi
+echo "LHUB: start the device service for your user with: systemctl --user enable --now lhubd"

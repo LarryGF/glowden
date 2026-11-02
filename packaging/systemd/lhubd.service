@@ -1,5 +1,5 @@
 [Unit]
-Description=lhub device service (keeps Logitech device settings and live lighting applied)
+Description=LHUB device service (keeps Logitech device settings and live lighting applied)
 After=graphical-session.target
 
 [Service]
