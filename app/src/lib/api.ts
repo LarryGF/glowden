@@ -9,6 +9,11 @@ export type VoiceState = {
   running: boolean;
   error: string | null;
   has_test: boolean;
+  default_mic: boolean;
+  settings: Record<string, unknown>;
+  overrides: Record<string, number | boolean>;
+  controls: { path: string; group: string; label: string; min: number; max: number; step: number; unit: string }[];
+  switches: { group: string; path: string }[];
   details: Record<string, {
     noise_reduction: number | null;
     bass: number;
@@ -122,8 +127,10 @@ const request = <T>(req: Record<string, unknown>) => invoke<T>("request", { req 
 export const api = {
   listDevices: () => request<Device[]>({ cmd: "list" }),
   voiceState: (id: string) => request<VoiceState>({ cmd: "voice_state", id }),
-  setVoice: (id: string, enabled: boolean, preset: string | null) =>
-    request<VoiceState>({ cmd: "set_voice", id, enabled, preset }),
+  setVoice: (id: string, enabled: boolean, preset: string | null, default_mic = true) =>
+    request<VoiceState>({ cmd: "set_voice", id, enabled, preset, default_mic }),
+  setVoiceOverrides: (id: string, overrides: Record<string, number | boolean>) =>
+    request<VoiceState>({ cmd: "set_voice_overrides", id, overrides }),
   getMuted: (id: string) => request<boolean>({ cmd: "get_muted", id }),
   voiceTestRecord: (id: string, seconds: number) => request<void>({ cmd: "voice_test_record", id, seconds }),
   voiceTestPlay: (preset: string | null) => request<void>({ cmd: "voice_test_play", preset }),

@@ -110,12 +110,240 @@ fn source_node(pattern: &str) -> Option<String> {
     })
 }
 
+fn pactl(args: &[&str]) -> Option<String> {
+    let out = Command::new("pactl")
+        .args(args)
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// G HUB processes the microphone itself, so every app hears VO!CE. Here the processed
+/// microphone becomes the default input while it runs. It appears a moment after the host
+/// starts, so this retries briefly.
+pub fn make_default() {
+    std::thread::spawn(|| {
+        for _ in 0..30 {
+            if pactl(&["set-default-source", "lhub-bluevoice"]).is_some() {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        eprintln!("Blue VO!CE: couldn't make the virtual microphone the default input");
+    });
+}
+
+/// Hands the default input back to the real microphone if VO!CE had it.
+pub fn release_default(def: &VoiceDef) {
+    if pactl(&["get-default-source"]).as_deref() == Some("lhub-bluevoice")
+        && let Some(source) = source_node(&def.source)
+    {
+        pactl(&["set-default-source", &source]);
+    }
+}
+
 fn binary() -> PathBuf {
     std::env::current_exe()
         .ok()
         .and_then(|e| Some(e.parent()?.join("lhub-voice")))
         .filter(|p| p.exists())
         .unwrap_or_else(|| PathBuf::from("lhub-voice"))
+}
+
+/// Fine-tuning controls offered on top of a preset (G HUB's advanced VO!CE controls): preset
+/// field, group, label, min, max, step, unit. Ranges stay inside what the engine was seen to
+/// accept (tools/voice-probes/field_probe).
+pub const CONTROLS: &[(&str, &str, &str, f64, f64, f64, &str)] = &[
+    (
+        "highPassFilter.frequency",
+        "High-pass filter",
+        "Cutoff",
+        20.0,
+        400.0,
+        1.0,
+        "Hz",
+    ),
+    (
+        "noiseReduction.maxAttenuation",
+        "Noise reduction",
+        "Amount",
+        -30.0,
+        0.0,
+        1.0,
+        "dB",
+    ),
+    (
+        "noiseReduction.sensitivity",
+        "Noise reduction",
+        "Sensitivity",
+        0.0,
+        40.0,
+        1.0,
+        "",
+    ),
+    (
+        "noiseReduction.release",
+        "Noise reduction",
+        "Release",
+        10.0,
+        1000.0,
+        5.0,
+        "ms",
+    ),
+    (
+        "gatingCompressor.noiseGateThreshold",
+        "Noise gate",
+        "Threshold",
+        -80.0,
+        -20.0,
+        1.0,
+        "dB",
+    ),
+    (
+        "gatingCompressor.noiseGateMaxAttenuation",
+        "Noise gate",
+        "Depth",
+        -60.0,
+        0.0,
+        1.0,
+        "dB",
+    ),
+    (
+        "gatingCompressor.compressorThreshold",
+        "Compressor",
+        "Threshold",
+        -40.0,
+        0.0,
+        1.0,
+        "dB",
+    ),
+    (
+        "gatingCompressor.compressorRatio",
+        "Compressor",
+        "Ratio",
+        2.0,
+        10.0,
+        0.5,
+        ":1",
+    ),
+    (
+        "gatingCompressor.compressorPostGain",
+        "Compressor",
+        "Make-up gain",
+        0.0,
+        10.0,
+        0.5,
+        "dB",
+    ),
+    (
+        "multiBandEq.lowBandFilter.gain",
+        "Voice EQ",
+        "Bass",
+        -12.0,
+        12.0,
+        0.5,
+        "dB",
+    ),
+    (
+        "multiBandEq.midBandFilter.gain",
+        "Voice EQ",
+        "Mids",
+        -12.0,
+        12.0,
+        0.5,
+        "dB",
+    ),
+    (
+        "multiBandEq.highBandFilter.gain",
+        "Voice EQ",
+        "Treble",
+        -12.0,
+        12.0,
+        0.5,
+        "dB",
+    ),
+    (
+        "deEsser.threshold",
+        "De-esser",
+        "Threshold",
+        -60.0,
+        0.0,
+        1.0,
+        "dB",
+    ),
+    (
+        "deEsser.maxAttenuation",
+        "De-esser",
+        "Amount",
+        -40.0,
+        0.0,
+        1.0,
+        "dB",
+    ),
+    (
+        "dePopper.threshold",
+        "De-popper",
+        "Threshold",
+        -60.0,
+        0.0,
+        1.0,
+        "dB",
+    ),
+    (
+        "dePopper.maxAttenuation",
+        "De-popper",
+        "Amount",
+        -40.0,
+        0.0,
+        1.0,
+        "dB",
+    ),
+    (
+        "hardLimiter.boost",
+        "Limiter",
+        "Boost",
+        0.0,
+        10.0,
+        0.5,
+        "dB",
+    ),
+];
+
+/// Each stage's on/off switch, per group above.
+pub const SWITCHES: &[(&str, &str)] = &[
+    ("High-pass filter", "highPassFilter.enabled"),
+    ("Noise reduction", "noiseReduction.enabled"),
+    ("Compressor", "gatingCompressor.compressorEnabled"),
+    ("Voice EQ", "multiBandEq.enabled"),
+    ("De-esser", "deEsser.enabled"),
+    ("De-popper", "dePopper.enabled"),
+    ("Limiter", "hardLimiter.enabled"),
+];
+
+/// A preset's settings with fine-tuning (`path` → value) applied on top.
+pub fn merged(settings: &Value, overrides: &std::collections::BTreeMap<String, Value>) -> Value {
+    let mut s = settings.clone();
+    for (path, value) in overrides {
+        let mut at = &mut s;
+        let mut parts = path.split('.').peekable();
+        while let Some(k) = parts.next() {
+            if !at.is_object() {
+                *at = Value::Object(Default::default());
+            }
+            let obj = at.as_object_mut().unwrap();
+            if parts.peek().is_none() {
+                obj.insert(k.to_string(), value.clone());
+                break;
+            }
+            at = obj
+                .entry(k)
+                .or_insert_with(|| Value::Object(Default::default()));
+        }
+    }
+    s
 }
 
 /// What a preset does, for the app: the numbers that differ between presets.
@@ -179,6 +407,26 @@ pub struct Voice {
 }
 
 impl Voice {
+    /// Runs the virtual microphone with `settings`: live update when it already runs (no
+    /// interruption for apps), otherwise a fresh start.
+    pub fn apply(&mut self, id: &str, def: &VoiceDef, settings: &Value) {
+        if let Some(child) = self.running.get_mut(id)
+            && matches!(child.try_wait(), Ok(None))
+            && let Some(stdin) = child.stdin.as_mut()
+        {
+            use std::io::Write;
+            let line = engine_args(settings).join(" ") + "\n";
+            if stdin
+                .write_all(line.as_bytes())
+                .and_then(|_| stdin.flush())
+                .is_ok()
+            {
+                return;
+            }
+        }
+        self.start(id, def, settings);
+    }
+
     pub fn start(&mut self, id: &str, def: &VoiceDef, settings: &Value) {
         self.stop(id);
         match Self::spawn(def, settings) {
@@ -202,7 +450,8 @@ impl Voice {
             .args(["--target", &source, "--name", "lhub-bluevoice"])
             .args(["--description", &def.description])
             .args(engine_args(settings))
-            .stdin(Stdio::null())
+            // Later settings arrive on stdin, applied without restarting.
+            .stdin(Stdio::piped())
             .spawn()
             .map_err(|e| format!("cannot start lhub-voice: {e}"))
     }

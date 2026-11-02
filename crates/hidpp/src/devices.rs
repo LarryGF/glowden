@@ -126,6 +126,18 @@ pub mod mic {
         Ok(())
     }
 
+    /// Sub-setting 05, write-only. G HUB sends exactly these bytes every time Blue VO!CE is
+    /// switched on or its preset changes (USB capture, voice-toggle); a third-party Yeti GX
+    /// tool calls it "smart lock". Values other than G HUB's are untested.
+    pub fn apply_voice_lock(dev: &mut Device) -> Result<()> {
+        dev.call(
+            MICROPHONE,
+            3,
+            &[0x00, 0x05, 0x07, 0x00, 0xae, 0x00, 0x00, 0x02],
+        )?;
+        Ok(())
+    }
+
     /// Same register as `set_muted`: 1 = live, 0 = muted (read back from the Yeti GX).
     pub fn muted(dev: &mut Device) -> Result<bool> {
         Ok(dev.call(MICROPHONE, 2, &[0x00, 0x00, 0x00])?[7] == 0)

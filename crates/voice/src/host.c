@@ -103,8 +103,16 @@ static void on_source(void *data)
     uint32_t n = d->maxsize / sizeof(float);
     if (b->requested && b->requested < n) n = b->requested;
     float *dst = d->data;
-    /* Start once a little audio is buffered, so the first reads don't underrun. */
+    /* Start once a little audio is buffered, so the first reads don't underrun. While no app
+     * reads the virtual mic, processed audio piles up; keep only the newest so a recording
+     * that starts later isn't delayed by it. */
     if (!st.primed && st.done.len >= 2 * BLOCK) st.primed = 1;
+    size_t keep = n + 2 * BLOCK;
+    if (st.done.len > keep) {
+        size_t drop = st.done.len - keep;
+        st.done.head = (st.done.head + drop) % FIFO;
+        st.done.len -= drop;
+    }
     size_t got = st.primed ? fifo_pop(&st.done, dst, n) : 0;
     if (got < n) memset(dst + got, 0, (n - got) * sizeof(float));
     st.served += got;
@@ -116,6 +124,70 @@ static void on_source(void *data)
 
 static const struct pw_stream_events capture_events = {PW_VERSION_STREAM_EVENTS, .process = on_capture};
 static const struct pw_stream_events source_events = {PW_VERSION_STREAM_EVENTS, .process = on_source};
+
+/* "f|b|u OFF VALUE" → parameter block. Returns 0, or -1 for an offset out of range. */
+static int set_field(uint8_t *params, size_t cap, char kind, const char *off_hex, const char *value)
+{
+    long off = strtol(off_hex, NULL, 16);
+    if (off < 0 || off + 4 > (long)cap) return -1;
+    if (kind == 'f') {
+        float v = atof(value);
+        memcpy(params + off, &v, 4);
+    } else if (kind == 'u') {
+        uint32_t v = strtoul(value, NULL, 10);
+        memcpy(params + off, &v, 4);
+    } else {
+        params[off] = atoi(value);
+    }
+    return 0;
+}
+
+/* New settings while running: one line of "f|b|u OFF VALUE" triples on stdin, applied on top
+ * of the engine defaults (so fields left out go back to default) without restarting. */
+static uint8_t default_params[1024];
+static int (WINAPI *update_params)(void *, void *);
+static char line[16384];
+static size_t line_len;
+static struct spa_source *input_source;
+
+static void apply_line(char *text)
+{
+    static uint8_t params[1024];
+    memcpy(params, default_params, sizeof params);
+    char *save = NULL, *tok[3];
+    int n = 0;
+    for (char *t = strtok_r(text, " \t", &save); t; t = strtok_r(NULL, " \t", &save)) {
+        tok[n++] = t;
+        if (n == 3) {
+            if (!strchr("fbu", tok[0][0]) || set_field(params, sizeof params, tok[0][0], tok[1], tok[2])) {
+                fprintf(stderr, "lhub-voice: bad setting %s %s %s\n", tok[0], tok[1], tok[2]);
+                return;
+            }
+            n = 0;
+        }
+    }
+    int r = update_params(st.inst, params);
+    fprintf(stderr, r ? "lhub-voice: engine rejected the new settings (%d)\n" : "lhub-voice: settings updated\n", r);
+}
+
+static void on_stdin(void *data, int fd, uint32_t mask)
+{
+    ssize_t got = read(fd, line + line_len, sizeof line - 1 - line_len);
+    if (got <= 0) {
+        /* No (more) settings coming: stop watching; the parent check handles shutdown. */
+        if (got == 0) pw_loop_destroy_source(pw_main_loop_get_loop(st.loop), input_source);
+        return;
+    }
+    line_len += got;
+    char *nl;
+    while ((nl = memchr(line, '\n', line_len))) {
+        *nl = 0;
+        apply_line(line);
+        line_len -= nl + 1 - line;
+        memmove(line, nl + 1, line_len);
+    }
+    if (line_len == sizeof line - 1) line_len = 0;
+}
 
 static void stop(int sig)
 {
@@ -227,6 +299,8 @@ int lhub_voice_main(int argc, char **argv)
         return 1;
     }
     defaults(cfg.params);
+    memcpy(default_params, cfg.params, sizeof default_params);
+    update_params = pe_export(img, "?dtsClearVoice2UpdateParameters@");
 
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--target") && i + 1 < argc) target = argv[++i];
@@ -237,19 +311,9 @@ int lhub_voice_main(int argc, char **argv)
             process_out = argv[++i];
         }
         else if (strchr("fbu", argv[i][0]) && !argv[i][1] && i + 2 < argc) {
-            long off = strtol(argv[i + 1], NULL, 16);
-            if (off < 0 || off + 4 > (long)sizeof cfg.params) {
+            if (set_field(cfg.params, sizeof cfg.params, argv[i][0], argv[i + 1], argv[i + 2])) {
                 fprintf(stderr, "lhub-voice: offset %s out of range\n", argv[i + 1]);
                 return 2;
-            }
-            if (argv[i][0] == 'f') {
-                float v = atof(argv[i + 2]);
-                memcpy(cfg.params + off, &v, 4);
-            } else if (argv[i][0] == 'u') {
-                uint32_t v = strtoul(argv[i + 2], NULL, 10);
-                memcpy(cfg.params + off, &v, 4);
-            } else {
-                cfg.params[off] = atoi(argv[i + 2]);
             }
             i += 2;
         } else {
@@ -279,6 +343,8 @@ int lhub_voice_main(int argc, char **argv)
     signal(SIGINT, stop);
     signal(SIGTERM, stop);
     parent = getppid();
+    if (update_params && !isatty(STDIN_FILENO))
+        input_source = pw_loop_add_io(pw_main_loop_get_loop(st.loop), STDIN_FILENO, SPA_IO_IN, false, on_stdin, NULL);
     struct spa_source *timer = pw_loop_add_timer(pw_main_loop_get_loop(st.loop), check_parent, NULL);
     struct timespec second = {1, 0};
     pw_loop_update_timer(pw_main_loop_get_loop(st.loop), timer, &second, &second, false);

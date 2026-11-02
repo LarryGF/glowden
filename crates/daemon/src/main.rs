@@ -187,6 +187,9 @@ fn manage(shared: Shared) {
                 .insert(id.clone(), worker::spawn(f, cfg, driver.clone()));
             if let (Some(v), Some(def)) = (voice, driver.and_then(|d| d.voice)) {
                 start_voice(&mut st, &id, &def, &v);
+                if v.default_mic {
+                    voice::make_default();
+                }
             }
             drop(st);
             shared.1.notify_all();
@@ -295,6 +298,13 @@ enum Request {
         id: String,
         enabled: bool,
         preset: Option<String>,
+        #[serde(default = "yes")]
+        default_mic: bool,
+    },
+    /// Fine-tuning on top of the current preset (an empty map resets to the preset).
+    SetVoiceOverrides {
+        id: String,
+        overrides: std::collections::BTreeMap<String, Value>,
     },
 }
 
@@ -416,7 +426,37 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
             id,
             enabled,
             preset,
-        } => set_voice(shared, &id, VoiceConfig { enabled, preset }),
+            default_mic,
+        } => set_voice(
+            shared,
+            &id,
+            VoiceConfig {
+                enabled,
+                preset,
+                default_mic,
+                overrides: Default::default(),
+            },
+        ),
+        Request::SetVoiceOverrides { id, overrides } => {
+            let mut st = lock.lock().unwrap();
+            let def = voice_def(&st, &id).ok_or("this device has no Blue VO!CE")?;
+            let cfg = {
+                let v = st
+                    .config
+                    .devices
+                    .entry(id.clone())
+                    .or_default()
+                    .voice
+                    .get_or_insert_default();
+                v.overrides = overrides;
+                v.clone()
+            };
+            st.config.save();
+            if cfg.enabled {
+                start_voice(&mut st, &id, &def, &cfg);
+            }
+            Ok(voice_state(&mut st, &id))
+        }
         Request::MouseInfo { id } => ask(shared, &id, Cmd::MouseInfo),
         Request::DeviceLayout { id } => {
             // Cloned out so a first-time photo download doesn't hold the state lock.
@@ -564,7 +604,8 @@ fn voice_def(st: &State, id: &str) -> Option<drivers::VoiceDef> {
 }
 
 /// Starts the virtual microphone with the configured preset (the first one by default).
-fn start_voice(st: &mut State, id: &str, def: &drivers::VoiceDef, cfg: &VoiceConfig) {
+/// The chosen preset (the first one by default) with the fine-tuning applied.
+fn voice_settings(cfg: &VoiceConfig) -> Value {
     let presets = voice::presets();
     let chosen = cfg
         .preset
@@ -572,7 +613,11 @@ fn start_voice(st: &mut State, id: &str, def: &drivers::VoiceDef, cfg: &VoiceCon
         .and_then(|name| presets.iter().find(|(n, _)| n == name))
         .or(presets.first());
     let settings = chosen.map(|(_, s)| s.clone()).unwrap_or(Value::Null);
-    st.voice.start(id, def, &settings);
+    voice::merged(&settings, &cfg.overrides)
+}
+
+fn start_voice(st: &mut State, id: &str, def: &drivers::VoiceDef, cfg: &VoiceConfig) {
+    st.voice.apply(id, def, &voice_settings(cfg));
 }
 
 fn voice_state(st: &mut State, id: &str) -> Value {
@@ -596,6 +641,13 @@ fn voice_state(st: &mut State, id: &str) -> Value {
         "engine": voice::engine().is_some(),
         "presets": presets,
         "enabled": cfg.enabled,
+        "default_mic": cfg.default_mic,
+        "settings": voice_settings(&cfg),
+        "overrides": cfg.overrides,
+        "controls": voice::CONTROLS.iter().map(|(path, group, label, min, max, step, unit)| {
+            json!({ "path": path, "group": group, "label": label, "min": min, "max": max, "step": step, "unit": unit })
+        }).collect::<Vec<_>>(),
+        "switches": voice::SWITCHES.iter().map(|(group, path)| json!({ "group": group, "path": path })).collect::<Vec<_>>(),
         "preset": cfg.preset.or_else(|| presets.first().cloned()),
         "running": running,
         "error": error,
@@ -607,6 +659,14 @@ fn set_voice(shared: &Shared, id: &str, cfg: VoiceConfig) -> Result<Value, Strin
         let mut st = shared.0.lock().unwrap();
         let def = voice_def(&st, id).ok_or("this device has no Blue VO!CE")?;
         let previous = st.config.devices.get(id).and_then(|c| c.voice.clone());
+        let mut cfg = cfg;
+        // Fine-tuning belongs to the preset it was made on.
+        if previous.as_ref().map(|p| &p.preset) == Some(&cfg.preset) && cfg.overrides.is_empty() {
+            cfg.overrides = previous
+                .as_ref()
+                .map(|p| p.overrides.clone())
+                .unwrap_or_default();
+        }
         st.config.devices.entry(id.to_string()).or_default().voice = Some(cfg.clone());
         st.config.save();
         if cfg.enabled {
@@ -614,21 +674,32 @@ fn set_voice(shared: &Shared, id: &str, cfg: VoiceConfig) -> Result<Value, Strin
         } else {
             st.voice.stop(id);
         }
-        // A newly picked preset brings its input gain, as in G HUB (0.7 → 70 %).
+        if cfg.enabled && cfg.default_mic {
+            voice::make_default();
+        } else {
+            voice::release_default(&def);
+        }
+        // Switching on or changing preset applies the preset's input gain and the smart-lock
+        // setting, as G HUB does (capture: gain 0.7 → 70 on enable).
+        let was_on = previous.as_ref().is_some_and(|p| p.enabled);
         let changed = previous.and_then(|p| p.preset) != cfg.preset;
-        let gain = (cfg.enabled && changed)
+        let gain = (cfg.enabled && (changed || !was_on))
             .then(|| {
-                voice::presets()
-                    .into_iter()
-                    .find(|(n, _)| Some(n) == cfg.preset.as_ref())
-                    .and_then(|(_, s)| s["inputGain"].as_f64())
+                let presets = voice::presets();
+                let chosen = cfg
+                    .preset
+                    .as_ref()
+                    .and_then(|name| presets.iter().find(|(n, _)| n == name))
+                    .or(presets.first());
+                chosen.and_then(|(_, s)| s["inputGain"].as_f64())
             })
             .flatten()
             .map(|g| (g * 100.0).round().clamp(0.0, 100.0) as u8);
-        (gain, voice_state(&mut st, id))
+        let notify = cfg.enabled && (changed || !was_on);
+        (notify.then_some(gain), voice_state(&mut st, id))
     };
-    if let Some(g) = gain {
-        ask(shared, id, |tx| Cmd::SetGain(g, tx))?;
+    if let Some(gain) = gain {
+        ask(shared, id, |tx| Cmd::VoiceApplied(gain, tx))?;
     }
     Ok(state)
 }
@@ -719,4 +790,8 @@ fn buttons(st: &State, id: &str) -> Result<Value, String> {
         "keys": keys::NAMES.iter().map(|(n, _)| *n).collect::<Vec<_>>(),
         "uinput": uinput::shared().err(),
     }))
+}
+
+fn yes() -> bool {
+    true
 }

@@ -27,6 +27,8 @@ pub enum Cmd {
     SetGain(u8, Reply),
     SetMuted(bool, Reply),
     GetMuted(Reply),
+    /// Blue VO!CE switched on or its preset changed: what G HUB sends the mic then.
+    VoiceApplied(Option<u8>, Reply),
     Release(Reply),
     MouseInfo(Reply),
 }
@@ -242,6 +244,15 @@ fn handle(
         Cmd::SetGain(g, tx) => reply(tx, mic::set_gain(dev, g).map(|_| Value::Null)),
         Cmd::SetMuted(m, tx) => reply(tx, mic::set_muted(dev, m).map(|_| Value::Null)),
         Cmd::GetMuted(tx) => reply(tx, mic::muted(dev).map(|m| json!(m))),
+        Cmd::VoiceApplied(gain, tx) => {
+            let r = (|| {
+                if let Some(g) = gain {
+                    mic::set_gain(dev, g)?;
+                }
+                mic::apply_voice_lock(dev)
+            })();
+            reply(tx, r.map(|_| Value::Null))
+        }
         Cmd::MouseInfo(tx) => {
             use devices::mouse;
             let info = (|| -> hidpp::Result<Value> {

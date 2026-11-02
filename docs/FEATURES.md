@@ -89,8 +89,9 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Blue VO!CE 2 engine | built | Real DTS ClearVoice 2 DLL via our PE loader, as a PipeWire virtual mic (`lhub-voice`) |
 | VO!CE presets → engine parameters | done | Every preset field measured (docs/voice.md); the 8 G HUB presets load |
 | VO!CE as a PipeWire virtual mic | built | "Yeti GX (Blue VO!CE)"; preset picker in the app; not yet heard by the user |
-| Smart lock | planned | G HUB byte `0xae` vs ours `0xca` unresolved |
-| Blue VO!CE automatic gain control, reference gain | next | Part of every VO!CE preset |
+| Smart lock | built | G HUB's exact bytes sent with VO!CE changes (`00 05 07 00 ae 00 00 02`) |
+| Blue VO!CE automatic gain control, reference gain | partly | Gain on enable and smart-lock bytes as G HUB sends them; AGC itself unidentified |
+| Blue VO!CE advanced controls | built | Per-stage switches and sliders on top of a preset, applied live |
 | Voice effects (21 presets: delay, flanger/phaser, reverb, ring modulation, pitch/formant voice changer) | planned | `AUDIO_EFFECTS_SETTINGS` cards for `yeti-gx`; engine is the DTS Studio APO in `driver_audio_apo` |
 
 ## Profiles, assignments, macros

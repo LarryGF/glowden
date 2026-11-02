@@ -164,8 +164,15 @@ pub enum MacroStep {
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
 pub struct VoiceConfig {
     pub enabled: bool,
+    /// Make the processed microphone the default input while VO!CE is on.
+    #[serde(default = "yes")]
+    pub default_mic: bool,
     /// Preset name as imported from G HUB; the first preset when unset or missing.
     pub preset: Option<String>,
+    /// Fine-tuning on top of the preset: preset field path → value. Cleared when the preset
+    /// changes.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub overrides: BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize, Default)]

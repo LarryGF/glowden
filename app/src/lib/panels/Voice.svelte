@@ -15,10 +15,10 @@
     return () => clearInterval(timer);
   });
 
-  async function apply(enabled: boolean, preset: string | null) {
+  async function apply(enabled: boolean, preset: string | null, defaultMic = state?.default_mic ?? true) {
     busy = true;
     try {
-      state = await api.setVoice(device.id, enabled, preset);
+      state = await api.setVoice(device.id, enabled, preset, defaultMic);
     } catch (e) {
       onerror(e);
     } finally {
@@ -41,6 +41,37 @@
       character === "Broadcaster" ? "Radio voice: strong compression for an even, up-front level." : "";
     return [how, where].filter(Boolean).join(" ");
   }
+
+  /** Value of a preset field ("a.b.c") in the current settings. */
+  function value(path: string): unknown {
+    return path.split(".").reduce<unknown>((v, k) => (v as Record<string, unknown> | undefined)?.[k], state?.settings);
+  }
+
+  let advanced = $state(false);
+  let pending: Record<string, number | boolean> = {};
+  let pushTimer: ReturnType<typeof setTimeout> | undefined;
+  function tune(path: string, v: number | boolean) {
+    pending = { ...(state?.overrides ?? {}), ...pending, [path]: v };
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(async () => {
+      const send = pending;
+      pending = {};
+      try {
+        state = await api.setVoiceOverrides(device.id, send);
+      } catch (e) {
+        onerror(e);
+      }
+    }, 250);
+  }
+  async function resetTuning() {
+    pending = {};
+    try {
+      state = await api.setVoiceOverrides(device.id, {});
+    } catch (e) {
+      onerror(e);
+    }
+  }
+  const groups = $derived([...new Set(state?.controls.map((c) => c.group) ?? [])]);
 
   const db = (v: number | null | undefined) => (v == null ? "–" : `${v > 0 ? "+" : ""}${v} dB`);
 
@@ -125,6 +156,38 @@
         </div>
       </section>
 
+      <section>
+        <button class="disclose" onclick={() => (advanced = !advanced)} aria-expanded={advanced}>
+          {advanced ? "▾" : "▸"} Advanced{Object.keys(state.overrides).length ? " (tuned)" : ""}
+        </button>
+        {#if advanced}
+          <p class="note">Fine-tune the selected preset. Changes apply live and are kept until you pick another preset.</p>
+          {#each groups as g}
+            {@const sw = state.switches.find((s) => s.group === g)}
+            <div class="group">
+              <div class="group-head">
+                <span>{g}</span>
+                {#if sw}
+                  <button class="switch small" class:on={value(sw.path) !== false} onclick={() => tune(sw.path, value(sw.path) === false)}>
+                    {value(sw.path) === false ? "Off" : "On"}
+                  </button>
+                {/if}
+              </div>
+              {#each state.controls.filter((c) => c.group === g) as c}
+                {@const v = Number(value(c.path) ?? 0)}
+                <label class="slider">
+                  <span>{c.label}</span>
+                  <input type="range" min={c.min} max={c.max} step={c.step} value={v} disabled={sw && value(sw.path) === false}
+                    oninput={(e) => tune(c.path, Number((e.target as HTMLInputElement).value))} />
+                  <em>{v}{c.unit === ":1" ? ":1" : ` ${c.unit}`}</em>
+                </label>
+              {/each}
+            </div>
+          {/each}
+          <div class="buttons"><button onclick={resetTuning} disabled={!Object.keys(state.overrides).length}>Reset to preset</button></div>
+        {/if}
+      </section>
+
       <section class="test">
         <h3>Test</h3>
         <p class="note">Record a few seconds, then compare the original with any preset on the same take. Use headphones.</p>
@@ -138,6 +201,13 @@
         </div>
       </section>
 
+      <label class="row-inline">
+        <span>Use as the default microphone while on</span>
+        <button class="switch small" class:on={state.default_mic} onclick={() => apply(state!.enabled, state!.preset, !state!.default_mic)}>
+          {state.default_mic ? "On" : "Off"}
+        </button>
+      </label>
+
       {#if state.enabled}
         <p class="status" class:ok={state.running}>
           {#if state.running}
@@ -148,8 +218,9 @@
         </p>
       {/if}
       <p class="note">
-        A preset also sets the microphone's input gain, as in G HUB. Logitech's engine runs on this
-        computer; the microphone keeps its normal input too.
+        Switching VO!CE on or changing preset sets the microphone's input gain from the preset and
+        its smart-lock setting, as G HUB does. Logitech's engine runs on this computer; the plain
+        microphone stays available too.
       </p>
     {/if}
   </div>
@@ -173,6 +244,13 @@
   .chips span { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: var(--bg); color: var(--text-dim); }
   .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
   .buttons button.active { border-color: var(--accent); color: var(--accent); }
+  .disclose { background: none; border: none; padding: 0; text-align: left; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; }
+  .group { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
+  .group-head { display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 13px; }
+  .slider { display: grid; grid-template-columns: 110px 1fr 70px; align-items: center; gap: 10px; font-size: 12px; color: var(--text-dim); }
+  .slider em { font-style: normal; color: var(--text); text-align: right; }
+  .switch.small { min-width: 48px; padding: 3px 10px; font-size: 12px; }
+  .row-inline { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
   .status { margin: 0; color: var(--warn); }
   .status.ok { color: var(--accent); }
   .note { margin: 0; color: var(--text-faint); font-size: 12px; line-height: 1.5; }
