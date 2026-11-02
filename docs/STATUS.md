@@ -64,7 +64,8 @@ copied into this repo.
 Definitions and plugins live in the glowden-devices repo and reach GlowDen as a device
 source (`sources.rs`): `index.json` plus flat files, from a URL or a local folder. The
 built-in source URL (`sources::DEFAULT_SOURCE`) points at
-github.com/larryGF/glowden-devices, which doesn't exist yet; until it's published, this
-machine uses a local build of glowden-devices (`dist/`) added as a second source. Blue
+github.com/larryGF/glowden-devices. Both repos are private for now, so that URL isn't
+reachable anonymously and has no release yet; until then this machine uses a local build of
+glowden-devices (`dist/`) added as a second source. Blue
 VO!CE runs in that repo's `blue-voice` plugin (JSON lines over stdin/stdout); verified here
 end to end (virtual mic up, levels flowing, pictures and layouts read in place).
