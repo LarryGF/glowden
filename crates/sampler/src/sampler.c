@@ -19,7 +19,7 @@
 
 #include <pipewire/pipewire.h>
 #include <spa/param/video/format-utils.h>
-#include <spa/param/buffers.h>
+#include <spa/param/param.h>
 #include <systemd/sd-bus.h>
 
 #define PORTAL "org.freedesktop.portal.Desktop"

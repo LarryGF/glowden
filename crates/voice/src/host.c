@@ -182,7 +182,9 @@ static void on_source(void *data)
         return;
     }
     uint32_t frames = d->maxsize / (2 * sizeof(float));
+#if PW_CHECK_VERSION(0, 3, 49)
     if (b->requested && b->requested < frames) frames = b->requested;
+#endif
     uint32_t n = 2 * frames;
     float *dst = d->data;
     /* Start once a little audio is buffered, so the first reads don't underrun. While no app

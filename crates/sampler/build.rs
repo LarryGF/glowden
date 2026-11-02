@@ -9,7 +9,9 @@ fn main() {
     build
         .file("src/sampler.c")
         .flag("-Wno-unused-parameter")
-        .flag("-Wno-missing-field-initializers");
+        .flag("-Wno-missing-field-initializers")
+        // Distro build flags may add GCC LTO, whose objects Rust's linker can't read.
+        .flag("-fno-lto");
     for f in flags.split_whitespace() {
         if let Some(dir) = f.strip_prefix("-I") {
             build.include(dir);

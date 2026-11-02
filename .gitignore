@@ -11,3 +11,6 @@ tools/voice-probes/field_probe
 tools/voice-probes/probe_effects
 tools/voice-probes/stage_probe
 /dist
+/packaging/arch/src/
+/packaging/arch/pkg/
+/packaging/arch/*.pkg.tar.zst

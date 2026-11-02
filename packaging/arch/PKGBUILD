@@ -10,7 +10,7 @@ optdepends=('libayatana-appindicator: tray icon'
             'libnotify: low-battery and lock-key notifications'
             'sqlite: importing settings from a G HUB settings.db'
             'xdg-desktop-portal: screen sampler lighting effect')
-makedepends=('rustup' 'pnpm' 'nodejs')
+makedepends=('cargo' 'pnpm' 'nodejs')
 install=lhub.install
 
 build() {

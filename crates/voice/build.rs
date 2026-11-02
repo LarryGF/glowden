@@ -10,7 +10,9 @@ fn main() {
         .files(["loader/pe.c", "loader/winapi.c", "src/host.c"])
         .include("loader")
         .flag("-Wno-unused-parameter")
-        .flag("-Wno-sign-compare");
+        .flag("-Wno-sign-compare")
+        // Distro build flags may add GCC LTO, whose objects Rust's linker can't read.
+        .flag("-fno-lto");
     for f in flags.split_whitespace() {
         if let Some(dir) = f.strip_prefix("-I") {
             build.include(dir);
