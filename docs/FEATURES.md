@@ -98,11 +98,11 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 
 | G HUB feature | Status | Notes |
 |---|---|---|
-| Profiles per application, auto switching | planned | Active-window tracking on KDE Wayland via KWin |
-| Persistent features (settings shared across profiles) | planned | |
+| Profiles per application, auto switching | built | KWin script reports focus over D-Bus (`dev.lhub.Focus`); profiles override lighting, brightness, DPI, report rate, assignments |
+| Persistent features (settings shared across profiles) | built | Anything a profile doesn't set comes from the default profile; VO!CE is global |
 | Macros (record, edit, assign) | built | Key/shortcut steps with pauses on mouse buttons; keyboard keys still planned |
 | Lua scripting | planned | |
-| Import/export profiles | planned | |
+| Import/export profiles | built | JSON file in your home folder |
 | Sound samples (play audio clips from a key or button) | planned | `audio_samples` depot, `Generic_Sample_*`, `Expression_Sample_*` |
 | System actions library (open apps, shortcuts, media) | planned | Built-in `MACRO_PLAYBACK` cards |
 | Settings backup and restore | planned | `/local_settings_backup/*` |

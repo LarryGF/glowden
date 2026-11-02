@@ -1676,6 +1676,7 @@ dependencies = [
 name = "lhubd"
 version = "0.1.0"
 dependencies = [
+ "dbus",
  "hidpp",
  "libc",
  "lighting",

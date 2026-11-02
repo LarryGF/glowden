@@ -4,11 +4,15 @@
   import DevicePage from "./lib/DevicePage.svelte";
   import Home from "./lib/Home.svelte";
   import Settings from "./lib/Settings.svelte";
+  import Profiles from "./lib/Profiles.svelte";
 
   let devices = $state<Device[]>([]);
   let loading = $state(true);
   let selectedId = $state<string | null>(null);
   let settings = $state(false);
+  let profilesPage = $state(false);
+  let activeProfile = $state<string | null>(null);
+  const pollProfile = () => api.profiles().then((p) => (activeProfile = p.active)).catch(() => {});
   // Looked up in the latest list so battery and charging stay current on the device page.
   const selected = $derived(devices.find((d) => d.id === selectedId) ?? null);
   let error = $state<string | null>(null);
@@ -35,17 +39,29 @@
     refresh();
     // Quiet background refresh: battery level, charging, devices coming and going.
     const timer = setInterval(() => api.listDevices().then((d) => (devices = d)).catch(() => {}), 15000);
-    return () => clearInterval(timer);
+    // The active profile follows the focused app.
+    pollProfile();
+    const profileTimer = setInterval(pollProfile, 2000);
+    return () => {
+      clearInterval(timer);
+      clearInterval(profileTimer);
+    };
   });
 </script>
 
 <div class="shell">
   <header>
-    {#if selected || settings}
-      <button class="back" onclick={() => ((selectedId = null), (settings = false))} aria-label="Back to devices">←</button>
-      <span class="title">{settings ? "Settings" : selected?.name}</span>
+    {#if selected || settings || profilesPage}
+      <button class="back" onclick={() => ((selectedId = null), (settings = false), (profilesPage = false))} aria-label="Back to devices">←</button>
+      <span class="title">{settings ? "Settings" : profilesPage ? "Profiles" : selected?.name}</span>
+      {#if selected}
+        <button class="profile" onclick={() => ((selectedId = null), (profilesPage = true))} title="Changes on this page are saved to this profile">
+          Profile: {activeProfile ?? "Default"}
+        </button>
+      {/if}
     {:else}
       <span class="brand"><span class="mark"></span>lhub</span>
+      <button class="profile" onclick={() => (profilesPage = true)}>Profile: {activeProfile ?? "Default"}</button>
       <button class="refresh" onclick={refresh} disabled={loading}>{loading ? "Scanning…" : "Rescan"}</button>
       <button class="gear" onclick={() => (settings = true)} aria-label="Settings" title="Settings">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -58,6 +74,8 @@
   <div class="body">
     {#if settings}
       <Settings onerror={showError} onchanged={refresh} />
+    {:else if profilesPage}
+      <Profiles onerror={showError} />
     {:else if selected}
       {#key selected.id}
         <DevicePage device={selected} onerror={showError} />
@@ -78,6 +96,8 @@
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; letter-spacing: 0.02em; }
   .mark { width: 18px; height: 18px; border-radius: 50%; border: 4px solid var(--accent); }
   .refresh { margin-left: auto; }
+  .profile { border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 600; }
+  header .back ~ .profile { margin-left: auto; }
   .gear { border: none; background: none; padding: 6px; display: grid; place-items: center; color: var(--text-dim); }
   .gear:hover { color: var(--text); }
   .back { border: none; background: none; font-size: 20px; padding: 4px 10px; }

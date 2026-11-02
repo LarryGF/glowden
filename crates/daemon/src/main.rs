@@ -5,6 +5,7 @@ mod app;
 mod battery;
 mod config;
 mod drivers;
+mod focus;
 mod keys;
 mod uinput;
 mod view;
@@ -32,6 +33,51 @@ struct State {
     workers: HashMap<String, Handle>,
     scanned: bool,
     voice: voice::Voice,
+    /// Profile in effect (None = default profile).
+    active: Option<String>,
+    /// Window classes focused lately, newest first, for linking apps to profiles.
+    recent: Vec<String>,
+    focused: Option<String>,
+}
+
+impl State {
+    fn effective(&self, id: &str) -> DeviceConfig {
+        self.config.effective(id, self.active.as_deref())
+    }
+
+    /// Re-applies every connected device after the active profile changed.
+    fn apply_all(&self) {
+        for (id, h) in &self.workers {
+            let _ = h.tx.send(Cmd::Apply(self.effective(id)));
+        }
+    }
+
+    /// Which profile should be active now: the focused app's when switching automatically,
+    /// else the one picked by hand.
+    fn wanted_profile(&self) -> Option<String> {
+        if !self.config.profile_auto {
+            return self
+                .config
+                .active_profile
+                .clone()
+                .filter(|n| self.config.profiles.iter().any(|p| &p.name == n));
+        }
+        let class = self.focused.as_deref()?.to_lowercase();
+        self.config
+            .profiles
+            .iter()
+            .find(|p| p.apps.iter().any(|a| a.to_lowercase() == class))
+            .map(|p| p.name.clone())
+    }
+
+    fn switch_profile(&mut self) {
+        let wanted = self.wanted_profile();
+        if wanted != self.active {
+            eprintln!("profile: {}", wanted.as_deref().unwrap_or("default"));
+            self.active = wanted;
+            self.apply_all();
+        }
+    }
 }
 
 type Shared = Arc<(Mutex<State>, Condvar)>;
@@ -61,6 +107,8 @@ fn single_instance() -> Option<std::fs::File> {
 fn main() {
     let path = socket_path();
     voice::stop_stale();
+    let (focus_tx, focus_rx) = mpsc::channel::<focus::Focus>();
+    focus::spawn(focus_tx);
     let Some(_lock) = single_instance() else {
         eprintln!("lhubd already running ({})", path.display());
         return;
@@ -77,12 +125,30 @@ fn main() {
             workers: HashMap::new(),
             scanned: false,
             voice: voice::Voice::default(),
+            active: None,
+            recent: Vec::new(),
+            focused: None,
         }),
         Condvar::new(),
     ));
 
     let manager = shared.clone();
     std::thread::spawn(move || manage(manager));
+    shared.0.lock().unwrap().switch_profile();
+    let focuser = shared.clone();
+    std::thread::spawn(move || {
+        for (class, _caption) in focus_rx {
+            if class.is_empty() {
+                continue;
+            }
+            let mut st = focuser.0.lock().unwrap();
+            st.recent.retain(|c| c != &class);
+            st.recent.insert(0, class.clone());
+            st.recent.truncate(15);
+            st.focused = Some(class);
+            st.switch_profile();
+        }
+    });
 
     for stream in listener.incoming().flatten() {
         let shared = shared.clone();
@@ -159,7 +225,7 @@ fn manage(shared: Shared) {
                 );
                 // Not saved: the configured lighting comes back on unlock.
                 for (id, h) in &st.workers {
-                    let mut cfg = st.config.devices.get(id).cloned().unwrap_or_default();
+                    let mut cfg = st.effective(id);
                     if cfg.lighting.is_none() {
                         continue;
                     }
@@ -178,7 +244,7 @@ fn manage(shared: Shared) {
         let skip = |id: &str| known.iter().any(|k| k == id) || silent.contains_key(id);
         let quiet = hidpp::discover::scan_each(&skip, &mut |f| {
             let mut st = shared.0.lock().unwrap();
-            let cfg = st.config.devices.get(&f.id).cloned().unwrap_or_default();
+            let cfg = st.effective(&f.id);
             eprintln!("{}: {} connected, applying {:?}", f.id, f.name, cfg);
             let id = f.id.clone();
             let driver = st.drivers.for_product(f.device.info.product).cloned();
@@ -273,6 +339,28 @@ enum Request {
         preset: Option<String>,
     },
     VoiceTestStop,
+    Profiles,
+    SetActiveProfile {
+        name: Option<String>,
+    },
+    /// Creates or updates a profile; `old` renames.
+    SaveProfile {
+        name: String,
+        apps: Vec<String>,
+        old: Option<String>,
+    },
+    DeleteProfile {
+        name: String,
+    },
+    SetProfileAuto {
+        on: bool,
+    },
+    ExportProfile {
+        name: String,
+    },
+    ImportProfile {
+        path: String,
+    },
     Buttons {
         id: String,
     },
@@ -352,9 +440,7 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
         }
         Request::GetConfig { id } => {
             let st = lock.lock().unwrap();
-            Ok(json!(
-                st.config.devices.get(&id).cloned().unwrap_or_default()
-            ))
+            Ok(json!(st.effective(&id)))
         }
         Request::SetLighting { id, lighting } => {
             update(shared, &id, |c| c.lighting = Some(lighting))
@@ -402,6 +488,98 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
         Request::VoiceTestStop => {
             lock.lock().unwrap().voice.stop_test();
             Ok(Value::Null)
+        }
+        Request::Profiles => Ok(profiles(&lock.lock().unwrap())),
+        Request::SetActiveProfile { name } => {
+            let mut st = lock.lock().unwrap();
+            st.config.active_profile = name.clone();
+            st.config.save();
+            // Picked by hand: applies now, even while switching automatically.
+            if st.active != name {
+                st.active = name;
+                st.apply_all();
+            }
+            Ok(profiles(&st))
+        }
+        Request::SaveProfile { name, apps, old } => {
+            let mut st = lock.lock().unwrap();
+            let name = name.trim().to_string();
+            if name.is_empty() || name.eq_ignore_ascii_case("default") {
+                return Err("pick another name".into());
+            }
+            let key = old.unwrap_or_else(|| name.clone());
+            if key != name && st.config.profiles.iter().any(|p| p.name == name) {
+                return Err(format!("a profile called {name} exists"));
+            }
+            match st.config.profiles.iter_mut().find(|p| p.name == key) {
+                Some(p) => {
+                    p.name = name.clone();
+                    p.apps = apps;
+                }
+                None => st.config.profiles.push(config::Profile {
+                    name: name.clone(),
+                    apps,
+                    devices: Default::default(),
+                }),
+            }
+            if st.active.as_deref() == Some(key.as_str()) {
+                st.active = Some(name.clone());
+            }
+            if st.config.active_profile.as_deref() == Some(key.as_str()) {
+                st.config.active_profile = Some(name);
+            }
+            st.config.save();
+            st.switch_profile();
+            Ok(profiles(&st))
+        }
+        Request::DeleteProfile { name } => {
+            let mut st = lock.lock().unwrap();
+            st.config.profiles.retain(|p| p.name != name);
+            if st.config.active_profile.as_deref() == Some(name.as_str()) {
+                st.config.active_profile = None;
+            }
+            if st.active.as_deref() == Some(name.as_str()) {
+                st.active = None;
+                st.apply_all();
+            }
+            st.config.save();
+            Ok(profiles(&st))
+        }
+        Request::SetProfileAuto { on } => {
+            let mut st = lock.lock().unwrap();
+            st.config.profile_auto = on;
+            st.config.save();
+            st.switch_profile();
+            Ok(profiles(&st))
+        }
+        Request::ExportProfile { name } => {
+            let st = lock.lock().unwrap();
+            let p = st
+                .config
+                .profiles
+                .iter()
+                .find(|p| p.name == name)
+                .ok_or("no such profile")?;
+            let dir = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
+            let file = dir.join(format!(
+                "lhub-profile-{}.json",
+                name.replace(['/', ' '], "-")
+            ));
+            std::fs::write(&file, serde_json::to_vec_pretty(p).unwrap())
+                .map_err(|e| e.to_string())?;
+            Ok(json!(file.display().to_string()))
+        }
+        Request::ImportProfile { path } => {
+            let mut st = lock.lock().unwrap();
+            let bytes = std::fs::read(&path).map_err(|e| format!("{path}: {e}"))?;
+            let mut p: config::Profile =
+                serde_json::from_slice(&bytes).map_err(|e| format!("{path}: {e}"))?;
+            while st.config.profiles.iter().any(|q| q.name == p.name) {
+                p.name.push_str(" (imported)");
+            }
+            st.config.profiles.push(p);
+            st.config.save();
+            Ok(profiles(&st))
         }
         Request::Buttons { id } => buttons(&lock.lock().unwrap(), &id),
         Request::SetAssignment { id, button, action } => update(shared, &id, |c| match action {
@@ -518,10 +696,18 @@ fn update(
     change: impl FnOnce(&mut DeviceConfig),
 ) -> Result<Value, String> {
     let mut st = shared.0.lock().unwrap();
-    let cfg = st.config.devices.entry(id.to_string()).or_default();
-    change(cfg);
-    let cfg = cfg.clone();
+    // While a profile is active, changes are saved into it (as G HUB edits the active profile).
+    let active = st.active.clone();
+    let target = match active
+        .as_ref()
+        .and_then(|name| st.config.profiles.iter_mut().find(|p| &p.name == name))
+    {
+        Some(p) => p.devices.entry(id.to_string()).or_default(),
+        None => st.config.devices.entry(id.to_string()).or_default(),
+    };
+    change(target);
     st.config.save();
+    let cfg = st.effective(id);
     if let Some(h) = st.workers.get(id) {
         let _ = h.tx.send(Cmd::Apply(cfg));
     }
@@ -555,7 +741,7 @@ fn ask(
 fn sync_lighting(shared: &Shared, from: &str) -> Result<Value, String> {
     let (lighting, brightness, targets) = {
         let st = shared.0.lock().unwrap();
-        let src = st.config.devices.get(from).cloned().unwrap_or_default();
+        let src = st.effective(from);
         let lighting = src.lighting.ok_or("this device has no lighting set yet")?;
         if !lighting.is_syncable() {
             return Err("this effect is specific to this device and can't be synced".into());
@@ -794,4 +980,18 @@ fn buttons(st: &State, id: &str) -> Result<Value, String> {
 
 fn yes() -> bool {
     true
+}
+
+fn profiles(st: &State) -> Value {
+    json!({
+        "profiles": st.config.profiles.iter().map(|p| json!({
+            "name": p.name,
+            "apps": p.apps,
+            "devices": p.devices.keys().collect::<Vec<_>>(),
+        })).collect::<Vec<_>>(),
+        "active": st.active,
+        "auto": st.config.profile_auto,
+        "focused": st.focused,
+        "recent": st.recent,
+    })
 }

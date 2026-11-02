@@ -181,6 +181,62 @@ pub struct Config {
     pub devices: BTreeMap<String, DeviceConfig>,
     #[serde(default)]
     pub app: AppSettings,
+    /// Per-app profiles; the settings above are the default profile.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub profiles: Vec<Profile>,
+    /// Switch profiles with the focused app.
+    #[serde(default = "yes")]
+    pub profile_auto: bool,
+    /// Profile picked by hand (used while automatic switching is off).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_profile: Option<String>,
+}
+
+/// A profile changes some device settings while active: lighting, brightness, DPI, report
+/// rate and button assignments. Anything it doesn't set comes from the default profile.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct Profile {
+    pub name: String,
+    /// Window classes (as KWin reports them, e.g. "steam_app_570", "firefox").
+    #[serde(default)]
+    pub apps: Vec<String>,
+    #[serde(default)]
+    pub devices: BTreeMap<String, DeviceConfig>,
+}
+
+impl Config {
+    /// A device's settings with the active profile's changes on top.
+    pub fn effective(&self, id: &str, active: Option<&str>) -> DeviceConfig {
+        let mut cfg = self.devices.get(id).cloned().unwrap_or_default();
+        let Some(over) = active
+            .and_then(|name| self.profiles.iter().find(|p| p.name == name))
+            .and_then(|p| p.devices.get(id))
+        else {
+            return cfg;
+        };
+        if over.lighting.is_some() {
+            cfg.lighting = over.lighting.clone();
+        }
+        if over.power.is_some() {
+            cfg.power = over.power;
+        }
+        if over.brightness.is_some() {
+            cfg.brightness = over.brightness;
+        }
+        if !over.dpi_levels.is_empty() {
+            cfg.dpi_levels = over.dpi_levels.clone();
+        }
+        if over.dpi_level.is_some() {
+            cfg.dpi_level = over.dpi_level;
+        }
+        if over.report_interval.is_some() {
+            cfg.report_interval = over.report_interval;
+        }
+        if !over.assignments.is_empty() {
+            cfg.assignments = over.assignments.clone();
+        }
+        cfg
+    }
 }
 
 /// Settings of lhub itself (the app's Settings page).

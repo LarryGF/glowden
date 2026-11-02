@@ -50,6 +50,14 @@ export type ButtonsInfo = {
   uinput: string | null;
 };
 
+export type ProfilesInfo = {
+  profiles: { name: string; apps: string[]; devices: string[] }[];
+  active: string | null;
+  auto: boolean;
+  focused: string | null;
+  recent: string[];
+};
+
 export type Kind = "microphone" | "headset" | "keyboard" | "mouse" | "device";
 
 export interface Device {
@@ -136,6 +144,14 @@ export const api = {
   voiceTestPlay: (preset: string | null) => request<void>({ cmd: "voice_test_play", preset }),
   voiceTestStop: () => request<void>({ cmd: "voice_test_stop" }),
   appSettings: () => request<AppInfo>({ cmd: "app_settings" }),
+  profiles: () => request<ProfilesInfo>({ cmd: "profiles" }),
+  setActiveProfile: (name: string | null) => request<ProfilesInfo>({ cmd: "set_active_profile", name }),
+  saveProfile: (name: string, apps: string[], old: string | null = null) =>
+    request<ProfilesInfo>({ cmd: "save_profile", name, apps, old }),
+  deleteProfile: (name: string) => request<ProfilesInfo>({ cmd: "delete_profile", name }),
+  setProfileAuto: (on: boolean) => request<ProfilesInfo>({ cmd: "set_profile_auto", on }),
+  exportProfile: (name: string) => request<string>({ cmd: "export_profile", name }),
+  importProfile: (path: string) => request<ProfilesInfo>({ cmd: "import_profile", path }),
   buttons: (id: string) => request<ButtonsInfo>({ cmd: "buttons", id }),
   setAssignment: (id: string, button: number, action: Action | null) =>
     request<void>({ cmd: "set_assignment", id, button, action }),
