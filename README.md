@@ -72,7 +72,7 @@ starts it when it isn't running).
 
 What GlowDen knows about each device (kind, key layout, LED regions, buttons, firmware
 effects) comes from device sources: GlowDen's own
-([glowden-devices](https://github.com/glowden/glowden-devices)) is always listed, and you can
+([glowden-devices](https://github.com/larryGF/glowden-devices)) is always listed, and you can
 add others in Settings → Device sources. A device that connects without a definition is
 looked up there automatically, and you can install or remove definitions one by one.
 

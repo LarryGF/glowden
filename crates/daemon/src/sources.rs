@@ -17,7 +17,7 @@ use sha2::{Digest, Sha256};
 use crate::config::SourceConfig;
 
 pub const DEFAULT_SOURCE: &str =
-    "https://github.com/glowden/glowden-devices/releases/latest/download/index.json";
+    "https://github.com/larryGF/glowden-devices/releases/latest/download/index.json";
 
 fn root() -> PathBuf {
     PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/share/glowden/sources")

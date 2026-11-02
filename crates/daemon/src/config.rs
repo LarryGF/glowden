@@ -377,6 +377,9 @@ impl Config {
             }),
             Err(_) => Config::default(),
         };
+        // An early build pointed at an account that isn't GlowDen's.
+        cfg.sources
+            .retain(|s| !s.url.starts_with("https://github.com/glowden/"));
         if !cfg
             .sources
             .iter()
