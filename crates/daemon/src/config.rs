@@ -138,6 +138,9 @@ pub struct AppSettings {
     pub ghub_paths: Vec<String>,
     #[serde(default = "yes")]
     pub low_battery_alert: bool,
+    /// Lights off while the session is locked, back on when unlocked (G HUB `lighting_sleep`).
+    #[serde(default = "yes")]
+    pub lighting_off_when_locked: bool,
 }
 
 impl Default for AppSettings {
@@ -145,6 +148,7 @@ impl Default for AppSettings {
         AppSettings {
             ghub_paths: Vec::new(),
             low_battery_alert: true,
+            lighting_off_when_locked: true,
         }
     }
 }

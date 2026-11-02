@@ -153,6 +153,12 @@
         <button class="switch" class:on={info.autostart} onclick={() => autostart(!info!.autostart)}>{info.autostart ? "On" : "Off"}</button>
       </label>
       <label class="row">
+        <span>Turn device lighting off while the screen is locked</span>
+        <button class="switch" class:on={info.settings.lighting_off_when_locked} onclick={() => save((s) => (s.lighting_off_when_locked = !s.lighting_off_when_locked))}>
+          {info.settings.lighting_off_when_locked ? "On" : "Off"}
+        </button>
+      </label>
+      <label class="row">
         <span>Notify when a device's battery is low (15 %)</span>
         <button class="switch" class:on={info.settings.low_battery_alert} onclick={() => save((s) => (s.low_battery_alert = !s.low_battery_alert))}>
           {info.settings.low_battery_alert ? "On" : "Off"}

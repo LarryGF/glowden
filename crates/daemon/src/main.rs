@@ -94,6 +94,7 @@ fn manage(shared: Shared) {
     // headset doesn't slow down noticing everything else.
     let mut silent: HashMap<String, std::time::Instant> = HashMap::new();
     let mut warned = std::collections::HashSet::new();
+    let mut locked = false;
     loop {
         {
             let mut st = shared.0.lock().unwrap();
@@ -141,6 +142,32 @@ fn manage(shared: Shared) {
                     } else if b.charging || b.percent > 20 {
                         warned.remove(id);
                     }
+                }
+            }
+        }
+        {
+            let st = shared.0.lock().unwrap();
+            let now = st.config.app.lighting_off_when_locked && app::session_locked();
+            if now != locked {
+                locked = now;
+                eprintln!(
+                    "session {}: lighting {}",
+                    if locked { "locked" } else { "unlocked" },
+                    if locked { "off" } else { "restored" }
+                );
+                // Not saved: the configured lighting comes back on unlock.
+                for (id, h) in &st.workers {
+                    let mut cfg = st.config.devices.get(id).cloned().unwrap_or_default();
+                    if cfg.lighting.is_none() {
+                        continue;
+                    }
+                    if locked {
+                        cfg.power = Some(false);
+                    } else if cfg.brightness.is_none() {
+                        // Devices without an "off" effect were dimmed to 0 while locked.
+                        cfg.brightness = Some(100);
+                    }
+                    let _ = h.tx.send(Cmd::Apply(cfg));
                 }
             }
         }

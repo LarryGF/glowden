@@ -78,3 +78,40 @@ pub fn notify(title: &str, body: &str) {
         .stderr(Stdio::null())
         .spawn();
 }
+
+/// Whether the user's graphical session is locked (logind `LockedHint`, set by the desktop's
+/// screen locker).
+pub fn session_locked() -> bool {
+    let uid = unsafe { libc::getuid() }.to_string();
+    let Ok(out) = Command::new("loginctl")
+        .args(["list-sessions", "--no-legend"])
+        .output()
+    else {
+        return false;
+    };
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|l| {
+            let mut f = l.split_whitespace();
+            let id = f.next()?;
+            (f.next()? == uid).then(|| id.to_string())
+        })
+        .any(|id| {
+            Command::new("loginctl")
+                .args([
+                    "show-session",
+                    &id,
+                    "-p",
+                    "Type",
+                    "-p",
+                    "LockedHint",
+                    "--value",
+                ])
+                .output()
+                .is_ok_and(|o| {
+                    let text = String::from_utf8_lossy(&o.stdout);
+                    let mut v = text.lines();
+                    matches!(v.next(), Some("wayland" | "x11")) && v.next() == Some("yes")
+                })
+        })
+}
