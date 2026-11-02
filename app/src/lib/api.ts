@@ -4,18 +4,24 @@ export type VoiceState = {
   plugin_error: string | null;
   supported: boolean;
   engine: boolean;
+  /** G HUB's presets (from the user's G HUB files) and the user's own. */
   presets: string[];
+  custom_presets: string[];
   enabled: boolean;
   preset: string | null;
   running: boolean;
   error: string | null;
   has_test: boolean;
+  previewing: boolean;
   default_mic: boolean;
   settings: Record<string, unknown>;
   overrides: Record<string, number | boolean>;
+  /** From the device's plugin. */
   controls: { path: string; group: string; label: string; min: number; max: number; step: number; unit: string }[];
   switches: { group: string; path: string }[];
+  effect_stages: EffectStage[];
   details: Record<string, {
+    note?: string;
     noise_reduction: number | null;
     bass: number;
     mids: number;
@@ -25,11 +31,23 @@ export type VoiceState = {
     boost: number | null;
     input_gain: number | null;
   }>;
-  effects: { name: string; settings: EffectSettings }[];
+  effects: string[];
+  custom_effects: string[];
+  /** What each effect preset turns on. */
+  effect_details: Record<string, string[]>;
   effect: string;
   effect_settings: EffectSettings | null;
   effect_overrides: Record<string, number | boolean | string>;
-  effect_modes: Record<string, string[]>;
+};
+
+export type EffectStage = {
+  stage: string;
+  title: string;
+  enable?: string;
+  controls: (
+    | { field: string; label: string; min: number; max: number; step: number; unit: string }
+    | { field: string; label: string; modes: { value: string; label: string }[] }
+  )[];
 };
 
 /** G HUB's voice effect settings: stage → field → value. */
@@ -176,12 +194,12 @@ export const api = {
     request<VoiceState>({ cmd: "set_voice_overrides", id, overrides }),
   getMuted: (id: string) => request<boolean>({ cmd: "get_muted", id }),
   voiceTestRecord: (id: string, seconds: number) => request<void>({ cmd: "voice_test_record", id, seconds }),
-  voiceTestPlay: (id: string, preset: string | null, effect: string | null = null) =>
-    request<void>({ cmd: "voice_test_play", id, preset, effect }),
+  voicePreview: (id: string, on: boolean) => request<VoiceState>({ cmd: "voice_preview", id, on }),
+  voicePresetAction: (id: string, kind: "voice" | "effect", action: "duplicate" | "rename" | "delete", name?: string, new_name?: string) =>
+    request<VoiceState>({ cmd: "voice_preset_action", id, kind, action, name, new_name }),
   setVoiceEffect: (id: string, effect: string | null) => request<VoiceState>({ cmd: "set_voice_effect", id, effect }),
   setVoiceEffectOverrides: (id: string, overrides: Record<string, number | boolean | string>) =>
     request<VoiceState>({ cmd: "set_voice_effect_overrides", id, overrides }),
-  voiceTestStop: () => request<void>({ cmd: "voice_test_stop" }),
   voiceLevels: (id: string) => request<{ input: number; output: number } | null>({ cmd: "voice_levels", id }),
   appSettings: () => request<AppInfo>({ cmd: "app_settings" }),
   profiles: () => request<ProfilesInfo>({ cmd: "profiles" }),

@@ -68,7 +68,9 @@ inventory with protocol notes is in [`docs/FEATURES.md`](docs/FEATURES.md).
 | **Microphone** | Gain, mute, lighting | ✅ |
 | | Blue VO!CE presets and fine-tuning | 🟡 with the engine from your G HUB files |
 | | Voice effects (21 presets) | 🟡 |
-| | Level meter, preset test on a recording | 🟡 |
+| | Mic test: record a sample, hear it looped while you change settings | 🟡 |
+| | Custom presets and effects (duplicate, rename, delete) | 🟡 |
+| | Level meter | 🟡 |
 | | Automatic gain control | ⏳ |
 | **Profiles** | Per-app profiles with automatic switching | 🟡 KDE Plasma |
 | | Profile import/export, settings backups | 🟡 |

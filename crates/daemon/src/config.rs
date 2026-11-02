@@ -245,9 +245,20 @@ pub struct Config {
     /// Lighting saved by the user to reuse on any device.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub lighting_presets: Vec<LightingPreset>,
+    /// The user's own VO!CE and voice effect presets (G HUB's "Custom Presets").
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub voice_presets: Vec<NamedSettings>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_presets: Vec<NamedSettings>,
     /// Where device definitions and plugins come from; GlowDen's own source is always first.
     #[serde(default)]
     pub sources: Vec<SourceConfig>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct NamedSettings {
+    pub name: String,
+    pub settings: serde_json::Value,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

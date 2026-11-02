@@ -256,42 +256,78 @@ impl Drop for Plugin {
     }
 }
 
-/// What a plugin offers the UI (controls, switches, effect modes) and its preset summaries.
-pub fn describe(binary: &Path, presets: &[(String, Value)]) -> Result<(Value, Value), String> {
-    static CACHE: Mutex<Option<(PathBuf, Value, Value)>> = Mutex::new(None);
-    let names: Vec<Value> = presets
-        .iter()
-        .map(|(n, s)| json!({ "name": n, "settings": s }))
-        .collect();
-    let mut cache = CACHE.lock().unwrap();
-    if let Some((b, d, s)) = cache.as_ref()
-        && b == binary
-        && s.as_object().is_some_and(|m| m.len() == names.len())
-    {
-        return Ok((d.clone(), s.clone()));
-    }
-    let mut p = Plugin::spawn(binary)?;
-    let d = p.call("describe", Value::Null, Duration::from_secs(5))?;
-    let s = p.call(
-        "summarize",
-        json!({ "presets": names }),
-        Duration::from_secs(5),
-    )?;
-    *cache = Some((binary.to_path_buf(), d.clone(), s.clone()));
-    Ok((d, s))
+/// What a plugin offers the UI: fine-tuning controls and effect stages (`describe`), notes
+/// and key numbers per VO!CE preset, and what each effect preset turns on.
+pub struct PluginInfo {
+    pub describe: Value,
+    pub presets: Value,
+    pub effects: Value,
 }
 
+pub fn describe(
+    binary: &Path,
+    presets: &[(String, Value)],
+    effects: &[(String, Value)],
+) -> Result<std::sync::Arc<PluginInfo>, String> {
+    type Cached = (PathBuf, Vec<String>, std::sync::Arc<PluginInfo>);
+    static CACHE: Mutex<Option<Cached>> = Mutex::new(None);
+    let key: Vec<String> = presets
+        .iter()
+        .chain(effects)
+        .map(|(n, s)| format!("{n}{s}"))
+        .collect();
+    let mut cache = CACHE.lock().unwrap();
+    if let Some((b, k, info)) = cache.as_ref()
+        && b == binary
+        && *k == key
+    {
+        return Ok(info.clone());
+    }
+    let list = |l: &[(String, Value)]| -> Vec<Value> {
+        l.iter()
+            .map(|(n, s)| json!({ "name": n, "settings": s }))
+            .collect()
+    };
+    let mut p = Plugin::spawn(binary)?;
+    let t = Duration::from_secs(5);
+    let info = std::sync::Arc::new(PluginInfo {
+        describe: p.call("describe", Value::Null, t)?,
+        presets: p.call("summarize", json!({ "presets": list(presets) }), t)?,
+        effects: p
+            .call("summarize_effects", json!({ "effects": list(effects) }), t)
+            .unwrap_or(json!({})),
+    });
+    *cache = Some((binary.to_path_buf(), key, info.clone()));
+    Ok(info)
+}
+
+/// Per microphone, one plugin process runs both the processed microphone ("live") and the
+/// mic test's looped preview; settings go to both.
 #[derive(Default)]
 pub struct Voice {
-    running: HashMap<String, Plugin>,
-    playing: Option<Child>,
+    plugins: HashMap<String, Plugin>,
+    live: std::collections::HashSet<String>,
+    previewing: std::collections::HashSet<String>,
     /// Why the last start for a device failed, for the UI.
     errors: HashMap<String, String>,
 }
 
 impl Voice {
-    /// Runs the processed microphone with these settings: a live update when it already
-    /// runs (no interruption for apps), otherwise a fresh start.
+    fn plugin(&mut self, id: &str, binary: &Path) -> Result<&mut Plugin, String> {
+        if self.plugins.get_mut(id).is_some_and(|p| !p.alive()) {
+            self.plugins.remove(id);
+            self.live.remove(id);
+            self.previewing.remove(id);
+        }
+        if !self.plugins.contains_key(id) {
+            self.plugins.insert(id.to_string(), Plugin::spawn(binary)?);
+        }
+        Ok(self.plugins.get_mut(id).unwrap())
+    }
+
+    /// Applies settings: runs the processed microphone while `active` (a live update when it
+    /// already runs, so apps aren't interrupted) and stops it otherwise; a running mic test
+    /// follows the same settings.
     pub fn apply(
         &mut self,
         id: &str,
@@ -299,36 +335,47 @@ impl Voice {
         plugin: Result<PathBuf, String>,
         voice: Option<&Value>,
         effects: Option<&Value>,
+        active: bool,
     ) {
         let params = json!({ "voice": voice, "effects": effects });
-        if let Some(p) = self.running.get_mut(id)
-            && p.alive()
-            && p.call("apply", params.clone(), Duration::from_secs(5))
-                .is_ok()
-        {
-            return;
-        }
-        self.stop(id);
-        let started = (|| {
+        let was_live = self.live.contains(id);
+        let result = (|| {
+            if !active && !was_live && !self.previewing.contains(id) {
+                return Ok(false);
+            }
             let binary = plugin?;
-            let engine = engine().ok_or(
-                "the Blue VO!CE engine wasn't found in your G HUB folders (Settings → G HUB files)",
-            )?;
-            let source = source_node(&def.source)
-                .ok_or_else(|| format!("no PipeWire source matching \"{}\"", def.source))?;
-            let mut p = Plugin::spawn(&binary)?;
-            let mut start = params;
-            start["engine"] = json!(engine);
-            start["source"] = json!(source);
-            start["name"] = json!(NODE);
-            start["description"] = json!(def.description);
-            p.call("start", start, Duration::from_secs(10))?;
-            Ok::<Plugin, String>(p)
+            let p = self.plugin(id, &binary)?;
+            let t = Duration::from_secs(10);
+            if active && !was_live {
+                let engine = engine().ok_or(
+                    "the Blue VO!CE engine wasn't found in your G HUB folders (Settings → G HUB files)",
+                )?;
+                let source = source_node(&def.source)
+                    .ok_or_else(|| format!("no PipeWire source matching \"{}\"", def.source))?;
+                let mut start = params.clone();
+                start["engine"] = json!(engine);
+                start["source"] = json!(source);
+                start["name"] = json!(NODE);
+                start["description"] = json!(def.description);
+                p.call("start", start, t)?;
+                // Also brings a running preview up to date.
+                p.call("apply", params.clone(), t)?;
+            } else {
+                if was_live && !active {
+                    p.call("stop", Value::Null, t)?;
+                }
+                p.call("apply", params.clone(), t)?;
+            }
+            Ok::<bool, String>(active)
         })();
-        match started {
-            Ok(p) => {
+        match result {
+            Ok(live) => {
+                if live {
+                    self.live.insert(id.to_string());
+                } else {
+                    self.live.remove(id);
+                }
                 self.errors.remove(id);
-                self.running.insert(id.to_string(), p);
             }
             Err(e) => {
                 eprintln!("{id}: Blue VO!CE: {e}");
@@ -337,71 +384,65 @@ impl Voice {
         }
     }
 
-    /// Plays the test recording as recorded (`None`) or processed by the plugin.
-    pub fn play_test(
+    /// The mic test: loops the recorded take through the current settings to the speakers,
+    /// as G HUB does; settings changed meanwhile apply to it live.
+    pub fn preview(
         &mut self,
-        processed: Option<(PathBuf, Option<Value>, Option<Value>)>,
+        id: &str,
+        binary: Result<PathBuf, String>,
+        voice: Option<&Value>,
+        effects: Option<&Value>,
     ) -> Result<(), String> {
-        self.stop_test();
         let raw = test_dir().join("raw.wav");
         if !raw.exists() {
-            return Err("record a test first".into());
+            return Err("record a sample first".into());
         }
-        let file = match processed {
-            None => raw,
-            Some((binary, voice, effects)) => {
-                let out = test_dir().join("processed.wav");
-                let engine =
-                    engine().ok_or("the Blue VO!CE engine wasn't found in your G HUB folders")?;
-                let mut p = Plugin::spawn(&binary)?;
-                p.call(
-                    "process",
-                    json!({ "engine": engine, "in": raw, "out": out, "voice": voice, "effects": effects }),
-                    Duration::from_secs(120),
-                )?;
-                out
-            }
-        };
-        self.playing = Some(
-            Command::new("pw-play")
-                .arg(file)
-                .stdin(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn()
-                .map_err(|e| format!("cannot start pw-play: {e}"))?,
-        );
+        let engine = engine().ok_or("the Blue VO!CE engine wasn't found in your G HUB folders")?;
+        let p = self.plugin(id, &binary?)?;
+        let t = Duration::from_secs(10);
+        p.call("apply", json!({ "voice": voice, "effects": effects }), t)?;
+        p.call("preview", json!({ "engine": engine, "file": raw }), t)?;
+        self.previewing.insert(id.to_string());
         Ok(())
+    }
+
+    pub fn stop_preview(&mut self, id: &str) {
+        if self.previewing.remove(id)
+            && let Some(p) = self.plugins.get_mut(id)
+        {
+            let _ = p.call("preview_stop", Value::Null, Duration::from_secs(5));
+        }
+    }
+
+    pub fn previewing(&self, id: &str) -> bool {
+        self.previewing.contains(id)
     }
 
     /// The current input and output peaks (dBFS), while the plugin reports them.
     pub fn levels(&self, id: &str) -> Option<(f32, f32)> {
-        let (i, o, at) = (*self.running.get(id)?.levels.lock().unwrap())?;
+        let (i, o, at) = (*self.plugins.get(id)?.levels.lock().unwrap())?;
         (at.elapsed().as_millis() < 1000).then_some((i, o))
     }
 
-    pub fn stop_test(&mut self) {
-        if let Some(mut child) = self.playing.take() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
-    }
-
+    /// Stops everything for a device (it disconnected, or its definition changed).
     pub fn stop(&mut self, id: &str) {
-        self.running.remove(id);
+        self.plugins.remove(id);
+        self.live.remove(id);
+        self.previewing.remove(id);
     }
 
     /// Whether the processed microphone is up; a crashed plugin is noticed and reported.
     pub fn status(&mut self, id: &str) -> (bool, Option<String>) {
-        if let Some(p) = self.running.get_mut(id)
+        if let Some(p) = self.plugins.get_mut(id)
             && let Ok(Some(code)) = p.child.try_wait()
         {
-            self.running.remove(id);
+            self.stop(id);
             self.errors.insert(
                 id.to_string(),
                 format!("the virtual microphone stopped ({code})"),
             );
         }
-        (self.running.contains_key(id), self.errors.get(id).cloned())
+        (self.live.contains(id), self.errors.get(id).cloned())
     }
 }
 

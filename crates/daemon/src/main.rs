@@ -558,15 +558,22 @@ enum Request {
         id: String,
         seconds: u64,
     },
-    /// Plays the test recording through a VO!CE preset and/or a voice effect (neither: as
-    /// recorded).
-    VoiceTestPlay {
+    /// The mic test: loop the recorded sample through the current settings (or stop).
+    VoicePreview {
         id: String,
-        preset: Option<String>,
-        #[serde(default)]
-        effect: Option<String>,
+        on: bool,
     },
-    VoiceTestStop,
+    /// Custom presets: "duplicate" the selected one, "rename" or "delete" a custom one.
+    /// `kind` is "voice" or "effect".
+    VoicePresetAction {
+        id: String,
+        kind: String,
+        action: String,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        new_name: Option<String>,
+    },
     VoiceLevels {
         id: String,
     },
@@ -755,37 +762,31 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
                 voice_def(&lock.lock().unwrap(), &id).ok_or("this device has no Blue VO!CE")?;
             voice::record_test(&def, seconds).map(|_| Value::Null)
         }
-        Request::VoiceTestPlay { id, preset, effect } => {
-            let find = |list: Vec<(String, Value)>,
-                        name: Option<String>|
-             -> Result<Option<Value>, String> {
-                match name {
-                    Some(name) => list
-                        .into_iter()
-                        .find(|(n, _)| *n == name)
-                        .map(|(_, s)| Some(s))
-                        .ok_or_else(|| format!("no preset called {name}")),
-                    None => Ok(None),
-                }
-            };
-            let settings = find(voice::presets(), preset)?;
-            let effects = find(voice::effect_presets(), effect)?;
+        Request::VoicePreview { id, on } => {
             let mut st = lock.lock().unwrap();
-            let processed = if settings.is_some() || effects.is_some() {
-                Some((voice_plugin(&st, &id)?, settings, effects))
+            if on {
+                let cfg = voice_config(&st, &id);
+                let settings = cfg.enabled.then(|| voice_settings(&st, &cfg));
+                let effects = effect_settings(&st, &cfg);
+                let plugin = voice_plugin(&st, &id);
+                st.voice
+                    .preview(&id, plugin, settings.as_ref(), effects.as_ref())?;
             } else {
-                None
-            };
-            st.voice.play_test(processed).map(|_| Value::Null)
+                st.voice.stop_preview(&id);
+            }
+            Ok(voice_state(&mut st, &id))
         }
+        Request::VoicePresetAction {
+            id,
+            kind,
+            action,
+            name,
+            new_name,
+        } => preset_action(shared, &id, &kind, &action, name, new_name),
         Request::VoiceLevels { id } => Ok(match lock.lock().unwrap().voice.levels(&id) {
             Some((input, output)) => json!({ "input": input, "output": output }),
             None => Value::Null,
         }),
-        Request::VoiceTestStop => {
-            lock.lock().unwrap().voice.stop_test();
-            Ok(Value::Null)
-        }
         Request::LightingPresets => Ok(json!(lock.lock().unwrap().config.lighting_presets)),
         Request::SaveLightingPreset { name, lighting } => {
             let mut st = lock.lock().unwrap();
@@ -1069,27 +1070,10 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
             v.effect = effect;
         }),
         Request::SetVoiceEffectOverrides { id, overrides } => {
-            update_voice(shared, &id, |v| v.effect_overrides = overrides)
+            set_overrides(shared, &id, "effect", overrides)
         }
         Request::SetVoiceOverrides { id, overrides } => {
-            let mut st = lock.lock().unwrap();
-            let def = voice_def(&st, &id).ok_or("this device has no Blue VO!CE")?;
-            let cfg = {
-                let v = st
-                    .config
-                    .devices
-                    .entry(id.clone())
-                    .or_default()
-                    .voice
-                    .get_or_insert_default();
-                v.overrides = overrides;
-                v.clone()
-            };
-            st.config.save();
-            if cfg.active() {
-                start_voice(&mut st, &id, &def, &cfg);
-            }
-            Ok(voice_state(&mut st, &id))
+            set_overrides(shared, &id, "voice", overrides)
         }
         Request::MouseInfo { id } => ask(shared, &id, Cmd::MouseInfo),
         Request::DeviceLayout { id } => {
@@ -1285,10 +1269,40 @@ fn voice_plugin(st: &State, id: &str) -> Result<PathBuf, String> {
     }
 }
 
-/// Starts the virtual microphone with the configured preset (the first one by default).
-/// The chosen preset (the first one by default) with the fine-tuning applied.
-fn voice_settings(cfg: &VoiceConfig) -> Value {
-    let presets = voice::presets();
+/// VO!CE presets: G HUB's from the user's G HUB files, then the user's own.
+fn all_presets(st: &State) -> Vec<(String, Value)> {
+    let mut list = voice::presets();
+    list.extend(
+        st.config
+            .voice_presets
+            .iter()
+            .map(|p| (p.name.clone(), p.settings.clone())),
+    );
+    list
+}
+
+fn all_effects(st: &State) -> Vec<(String, Value)> {
+    let mut list = voice::effect_presets();
+    list.extend(
+        st.config
+            .effect_presets
+            .iter()
+            .map(|p| (p.name.clone(), p.settings.clone())),
+    );
+    list
+}
+
+fn voice_config(st: &State, id: &str) -> VoiceConfig {
+    st.config
+        .devices
+        .get(id)
+        .and_then(|c| c.voice.clone())
+        .unwrap_or_default()
+}
+
+/// The chosen VO!CE preset (the first one by default) with the fine-tuning applied.
+fn voice_settings(st: &State, cfg: &VoiceConfig) -> Value {
+    let presets = all_presets(st);
     let chosen = cfg
         .preset
         .as_ref()
@@ -1299,27 +1313,29 @@ fn voice_settings(cfg: &VoiceConfig) -> Value {
 }
 
 /// The chosen voice effect with its fine-tuning, when effects are on.
-fn effect_settings(cfg: &VoiceConfig) -> Option<Value> {
+fn effect_settings(st: &State, cfg: &VoiceConfig) -> Option<Value> {
     let name = cfg.effect.as_ref().filter(|_| cfg.effect_on())?;
-    let (_, s) = voice::effect_presets()
-        .into_iter()
-        .find(|(n, _)| n == name)?;
+    let (_, s) = all_effects(st).into_iter().find(|(n, _)| n == name)?;
     Some(voice::merged(&s, &cfg.effect_overrides))
 }
 
+/// Applies a device's VO!CE config: the processed mic runs while VO!CE or an effect is on,
+/// and the mic test (if playing) follows the same settings.
 fn start_voice(st: &mut State, id: &str, def: &drivers::VoiceDef, cfg: &VoiceConfig) {
-    let settings = cfg.enabled.then(|| voice_settings(cfg));
+    let settings = cfg.enabled.then(|| voice_settings(st, cfg));
+    let effects = effect_settings(st, cfg);
     let plugin = voice_plugin(st, id);
     st.voice.apply(
         id,
         def,
         plugin,
         settings.as_ref(),
-        effect_settings(cfg).as_ref(),
+        effects.as_ref(),
+        cfg.active(),
     );
 }
 
-/// Changes the voice effect part of a device's VO!CE config and applies it.
+/// Changes a device's VO!CE config and applies it.
 fn update_voice(
     shared: &Shared,
     id: &str,
@@ -1342,51 +1358,229 @@ fn update_voice(
         v.clone()
     };
     st.config.save();
-    if cfg.active() {
-        start_voice(&mut st, id, &def, &cfg);
-        if cfg.default_mic {
-            voice::make_default();
-        }
+    start_voice(&mut st, id, &def, &cfg);
+    if cfg.active() && cfg.default_mic {
+        voice::make_default();
     } else {
-        st.voice.stop(id);
         voice::release_default(&def);
     }
     Ok(voice_state(&mut st, id))
 }
 
+/// Fine-tuning: on G HUB's presets it's kept as changes on top (reset restores the preset);
+/// the user's own presets are edited in place, as in G HUB.
+fn set_overrides(
+    shared: &Shared,
+    id: &str,
+    kind: &str,
+    overrides: std::collections::BTreeMap<String, Value>,
+) -> Result<Value, String> {
+    let custom_name = {
+        let st = shared.0.lock().unwrap();
+        let cfg = voice_config(&st, id);
+        let (name, list) = if kind == "effect" {
+            (cfg.effect, &st.config.effect_presets)
+        } else {
+            (cfg.preset, &st.config.voice_presets)
+        };
+        name.filter(|n| list.iter().any(|p| &p.name == n))
+    };
+    if let Some(name) = custom_name {
+        {
+            let mut st = shared.0.lock().unwrap();
+            let list = if kind == "effect" {
+                &mut st.config.effect_presets
+            } else {
+                &mut st.config.voice_presets
+            };
+            if let Some(p) = list.iter_mut().find(|p| p.name == name) {
+                p.settings = voice::merged(&p.settings, &overrides);
+            }
+        }
+        return update_voice(shared, id, |v| {
+            if kind == "effect" {
+                v.effect_overrides.clear();
+            } else {
+                v.overrides.clear();
+            }
+        });
+    }
+    update_voice(shared, id, |v| {
+        if kind == "effect" {
+            v.effect_overrides = overrides;
+        } else {
+            v.overrides = overrides;
+        }
+    })
+}
+
+/// G HUB's preset actions for custom presets: duplicate (the selected one, with its
+/// fine-tuning, as "Copy of …"), rename and delete.
+fn preset_action(
+    shared: &Shared,
+    id: &str,
+    kind: &str,
+    action: &str,
+    name: Option<String>,
+    new_name: Option<String>,
+) -> Result<Value, String> {
+    let effect = kind == "effect";
+    let mut st = shared.0.lock().unwrap();
+    let cfg = voice_config(&st, id);
+    let taken: Vec<String> = if effect {
+        all_effects(&st)
+    } else {
+        all_presets(&st)
+    }
+    .into_iter()
+    .map(|(n, _)| n)
+    .collect();
+    let mut select: Option<Option<String>> = None;
+    match action {
+        "duplicate" => {
+            let (source, settings) = if effect {
+                let s = effect_settings(&st, &cfg).ok_or("choose an effect to duplicate")?;
+                (cfg.effect.clone().unwrap_or_default(), s)
+            } else {
+                let s = voice_settings(&st, &cfg);
+                let name = cfg
+                    .preset
+                    .clone()
+                    .or_else(|| taken.first().cloned())
+                    .unwrap_or_default();
+                (name, s)
+            };
+            let mut new = format!("Copy of {source}");
+            let mut n = 2;
+            while taken.contains(&new) {
+                new = format!("Copy of {source} ({n})");
+                n += 1;
+            }
+            let entry = config::NamedSettings {
+                name: new.clone(),
+                settings,
+            };
+            if effect {
+                st.config.effect_presets.push(entry);
+            } else {
+                st.config.voice_presets.push(entry);
+            }
+            select = Some(Some(new));
+        }
+        "rename" => {
+            let old = name.ok_or("which preset?")?;
+            let new = new_name
+                .map(|n| n.trim().to_string())
+                .filter(|n| !n.is_empty())
+                .ok_or("the new name is empty")?;
+            if taken.contains(&new) {
+                return Err(format!("there's already a preset called {new}"));
+            }
+            let list = if effect {
+                &mut st.config.effect_presets
+            } else {
+                &mut st.config.voice_presets
+            };
+            let p = list
+                .iter_mut()
+                .find(|p| p.name == old)
+                .ok_or("only your own presets can be renamed")?;
+            p.name = new.clone();
+            for d in st.config.devices.values_mut() {
+                if let Some(v) = d.voice.as_mut() {
+                    let slot = if effect { &mut v.effect } else { &mut v.preset };
+                    if slot.as_deref() == Some(old.as_str()) {
+                        *slot = Some(new.clone());
+                    }
+                }
+            }
+        }
+        "delete" => {
+            let old = name.ok_or("which preset?")?;
+            let list = if effect {
+                &mut st.config.effect_presets
+            } else {
+                &mut st.config.voice_presets
+            };
+            let before = list.len();
+            list.retain(|p| p.name != old);
+            if list.len() == before {
+                return Err("only your own presets can be deleted".into());
+            }
+            for d in st.config.devices.values_mut() {
+                if let Some(v) = d.voice.as_mut() {
+                    let slot = if effect { &mut v.effect } else { &mut v.preset };
+                    if slot.as_deref() == Some(old.as_str()) {
+                        *slot = None;
+                    }
+                }
+            }
+        }
+        a => return Err(format!("unknown preset action {a}")),
+    }
+    st.config.save();
+    drop(st);
+    update_voice(shared, id, |v| {
+        if let Some(sel) = select {
+            if effect {
+                v.effect = sel;
+                v.effect_overrides.clear();
+            } else {
+                v.preset = sel;
+                v.overrides.clear();
+            }
+        }
+    })
+}
+
 fn voice_state(st: &mut State, id: &str) -> Value {
-    let cfg = st
-        .config
-        .devices
-        .get(id)
-        .and_then(|c| c.voice.clone())
-        .unwrap_or_default();
+    let cfg = voice_config(st, id);
     let (running, error) = st.voice.status(id);
-    let all = voice::presets();
-    let presets: Vec<String> = all.iter().map(|(n, _)| n.clone()).collect();
-    // Controls and preset summaries come from the plugin; without it, VO!CE can't run.
-    let plugin = voice_plugin(st, id).and_then(|b| voice::describe(&b, &all));
+    let all = all_presets(st);
+    let effects = all_effects(st);
+    // Controls, notes and summaries come from the plugin; without it, VO!CE can't run.
+    let plugin = voice_plugin(st, id).and_then(|b| voice::describe(&b, &all, &effects));
     let plugin_error = plugin.as_ref().err().cloned();
-    let (info, details) = plugin.unwrap_or_default();
+    let (info, details, effect_details) = match &plugin {
+        Ok(p) => (p.describe.clone(), p.presets.clone(), p.effects.clone()),
+        Err(_) => (json!({}), json!({}), json!({})),
+    };
+    let custom: Vec<&String> = st.config.voice_presets.iter().map(|p| &p.name).collect();
+    let custom_effects: Vec<&String> = st.config.effect_presets.iter().map(|p| &p.name).collect();
+    let curated: Vec<&String> = all
+        .iter()
+        .map(|(n, _)| n)
+        .filter(|n| !custom.contains(n))
+        .collect();
+    let curated_effects: Vec<&String> = effects
+        .iter()
+        .map(|(n, _)| n)
+        .filter(|n| !custom_effects.contains(n))
+        .collect();
+    let array = |v: &Value| if v.is_array() { v.clone() } else { json!([]) };
     json!({
         "plugin_error": plugin_error,
         "details": details,
+        "effect_details": effect_details,
         "has_test": voice::has_test(),
+        "previewing": st.voice.previewing(id),
         "supported": voice_def(st, id).is_some(),
         "engine": voice::engine().is_some(),
-        "presets": presets,
+        "presets": curated,
+        "custom_presets": custom,
         "enabled": cfg.enabled,
         "default_mic": cfg.default_mic,
-        "settings": voice_settings(&cfg),
+        "settings": voice_settings(st, &cfg),
         "overrides": cfg.overrides,
-        "controls": if info["controls"].is_array() { info["controls"].clone() } else { json!([]) },
-        "switches": if info["switches"].is_array() { info["switches"].clone() } else { json!([]) },
-        "effects": voice::effect_presets().into_iter().map(|(n, s)| json!({ "name": n, "settings": s })).collect::<Vec<_>>(),
+        "controls": array(&info["controls"]),
+        "switches": array(&info["switches"]),
+        "effect_stages": array(&info["effect_stages"]),
+        "effects": curated_effects,
+        "custom_effects": custom_effects,
         "effect": cfg.effect.clone().unwrap_or_else(|| "Off".into()),
-        "effect_settings": effect_settings(&cfg),
+        "effect_settings": effect_settings(st, &cfg),
         "effect_overrides": cfg.effect_overrides,
-        "effect_modes": if info["effect_modes"].is_object() { info["effect_modes"].clone() } else { json!({}) },
-        "preset": cfg.preset.or_else(|| presets.first().cloned()),
+        "preset": cfg.preset.clone().or_else(|| all.first().map(|(n, _)| n.clone())),
         "running": running,
         "error": error,
     })
@@ -1411,11 +1605,7 @@ fn set_voice(shared: &Shared, id: &str, cfg: VoiceConfig) -> Result<Value, Strin
         }
         st.config.devices.entry(id.to_string()).or_default().voice = Some(cfg.clone());
         st.config.save();
-        if cfg.active() {
-            start_voice(&mut st, id, &def, &cfg);
-        } else {
-            st.voice.stop(id);
-        }
+        start_voice(&mut st, id, &def, &cfg);
         if cfg.active() && cfg.default_mic {
             voice::make_default();
         } else {
@@ -1427,7 +1617,7 @@ fn set_voice(shared: &Shared, id: &str, cfg: VoiceConfig) -> Result<Value, Strin
         let changed = previous.and_then(|p| p.preset) != cfg.preset;
         let gain = (cfg.enabled && (changed || !was_on))
             .then(|| {
-                let presets = voice::presets();
+                let presets = all_presets(&st);
                 let chosen = cfg
                     .preset
                     .as_ref()

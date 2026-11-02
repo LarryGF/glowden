@@ -1,136 +1,32 @@
 <script lang="ts">
   import { api, type Device, type EffectSettings, type VoiceState } from "../api";
+  import PresetPicker from "./PresetPicker.svelte";
 
+  // G HUB's EFFECTS tab: an effect preset and its advanced controls, which come from the
+  // device's plugin (`effect_stages`).
   let {
     device,
-    state: voice,
+    voice,
     onstate,
     onerror,
-    onplay,
-  }: {
-    device: Device;
-    state: VoiceState;
-    onstate: (s: VoiceState) => void;
-    onerror: (e: unknown) => void;
-    onplay: (effect: string) => void;
-  } = $props();
+  }: { device: Device; voice: VoiceState; onstate: (s: VoiceState) => void; onerror: (e: unknown) => void } = $props();
 
-  type Control =
-    | { field: string; label: string; min: number; max: number; step: number; unit: string }
-    | { field: string; label: string; modes: string };
-  type Stage = { stage: string; title: string; enable?: string; controls: Control[] };
-
-  // G HUB's effect controls and ranges (its app bundle); "enable" is the stage's on switch.
-  const STAGES: Stage[] = [
-    {
-      stage: "vocalChanger",
-      title: "Voice",
-      controls: [
-        { field: "vocalMode1", label: "Primary voice", modes: "vocalMode" },
-        { field: "voiceModFactor1", label: "Primary amount", min: -2400, max: 2400, step: 50, unit: "cents" },
-        { field: "voiceGain1", label: "Primary level", min: -60, max: 0, step: 1, unit: "dB" },
-        { field: "vocalMode2", label: "Secondary voice", modes: "vocalMode" },
-        { field: "voiceModFactor2", label: "Secondary amount", min: -2400, max: 2400, step: 50, unit: "cents" },
-        { field: "voiceGain2", label: "Secondary level", min: -60, max: 0, step: 1, unit: "dB" },
-      ],
-    },
-    {
-      stage: "vocalChanger",
-      title: "Chorus",
-      enable: "chorusEnabled",
-      controls: [
-        { field: "chorusDelay", label: "Delay", min: 0, max: 100, step: 1, unit: "ms" },
-        { field: "chorusDelayMod", label: "Delay swing", min: 0, max: 100, step: 1, unit: "ms" },
-        { field: "chorusDelayModRate", label: "Delay swing rate", min: 0, max: 2, step: 0.05, unit: "Hz" },
-        { field: "chorusPitchMod", label: "Pitch swing", min: -600, max: 600, step: 10, unit: "cents" },
-        { field: "chorusPitchModRate", label: "Pitch swing rate", min: 0, max: 2, step: 0.05, unit: "Hz" },
-      ],
-    },
-    {
-      stage: "flangerPhaser",
-      title: "Flanger / phaser",
-      enable: "enabled",
-      controls: [
-        { field: "phaserMode", label: "Mode", modes: "phaserMode" },
-        { field: "depth", label: "Depth", min: 0, max: 1, step: 0.05, unit: "" },
-        { field: "rate", label: "Rate", min: 0, max: 5, step: 0.1, unit: "Hz" },
-      ],
-    },
-    {
-      stage: "ringModulation",
-      title: "Ring modulator",
-      enable: "enabled",
-      controls: [
-        { field: "shapeMode", label: "Shape", modes: "shapeMode" },
-        { field: "carrierFrequency", label: "Frequency", min: 1, max: 2000, step: 10, unit: "Hz" },
-        { field: "mix", label: "Mix", min: 0, max: 1, step: 0.05, unit: "" },
-      ],
-    },
-    {
-      stage: "reverb",
-      title: "Reverb",
-      enable: "enabled",
-      controls: [
-        { field: "reflectionMode", label: "Reflections", modes: "reflectionMode" },
-        { field: "mix", label: "Mix", min: 0, max: 1, step: 0.05, unit: "" },
-        { field: "reflectionLowPassFrequency", label: "Reflection low-pass", min: 10, max: 10000, step: 20, unit: "Hz" },
-        { field: "earlyLateMix", label: "Early / late", min: 0, max: 1, step: 0.05, unit: "" },
-        { field: "roomSize", label: "Room size", min: 0.01, max: 1, step: 0.05, unit: "" },
-      ],
-    },
-    {
-      stage: "delay",
-      title: "Echo",
-      enable: "enabled",
-      controls: [
-        { field: "inputMode", label: "Input", modes: "inputMode" },
-        { field: "feedbackMode", label: "Feedback routing", modes: "feedbackMode" },
-        { field: "feedbackTimbre", label: "Feedback tone", modes: "feedbackTimbre" },
-        { field: "mix", label: "Mix", min: 0, max: 1, step: 0.05, unit: "" },
-        { field: "feedback", label: "Feedback", min: 0, max: 0.6, step: 0.05, unit: "" },
-        { field: "leftDelay", label: "Left delay", min: 10, max: 2000, step: 10, unit: "ms" },
-        { field: "rightDelay", label: "Right delay", min: 10, max: 2000, step: 10, unit: "ms" },
-      ],
-    },
-  ];
-
-  /** "VOCAL_MODE_FORMANT_WARP" → "Formant warp". */
-  function modeLabel(mode: string): string {
-    const words = mode.replace(/^(VOCAL|PHASER|REFLECTION|SHAPE|INPUT|FEEDBACK)_(MODE_|TIMBRE_)?/, "").replace(/_/g, " ").toLowerCase();
-    const fixed: Record<string, string> = { "st flutter": "stereo flutter", noice: "noise", whispez: "whisper", halfwaverectifier: "half-wave", "saw tooth": "sawtooth", largediff: "large diffuse", midmix: "mid mix" };
-    const w = fixed[words] ?? words;
-    return w.charAt(0).toUpperCase() + w.slice(1);
-  }
-
-  const on = (s: EffectSettings, stage: string, key: string) => s[stage]?.[key] === true;
-  const val = (s: EffectSettings | null | undefined, stage: string, field: string) => s?.[stage]?.[field];
-
-  /** What a preset turns on, from its settings. */
-  function chips(s: EffectSettings): string[] {
-    const out: string[] = [];
-    const v = s.vocalChanger ?? {};
-    for (const [mode, factor] of [["vocalMode1", "voiceModFactor1"], ["vocalMode2", "voiceModFactor2"]]) {
-      const m = v[mode] as string | undefined;
-      if (!m || m === "VOCAL_MODE_OFF") continue;
-      const f = Number(v[factor] ?? 0);
-      const semis = Math.round(f / 10) / 10;
-      out.push(m.includes("PITCH") || m.includes("FORMANT") ? `${modeLabel(m)} ${semis > 0 ? "+" : ""}${semis} st` : modeLabel(m));
-    }
-    if (on(s, "vocalChanger", "chorusEnabled")) out.push("Chorus");
-    if (on(s, "flangerPhaser", "enabled")) out.push(modeLabel(String(s.flangerPhaser.phaserMode ?? "PHASER_MODE_FLANGER_UP")));
-    if (on(s, "ringModulation", "enabled")) out.push(`Ring mod ${s.ringModulation.carrierFrequency ?? 0} Hz`);
-    if (on(s, "reverb", "enabled")) out.push("Reverb");
-    if (on(s, "delay", "enabled")) out.push("Echo");
-    return out;
-  }
-
-  async function choose(effect: string) {
+  let busy = $state(false);
+  async function run(p: Promise<VoiceState>) {
+    busy = true;
     try {
-      onstate(await api.setVoiceEffect(device.id, effect === "Off" ? null : effect));
+      onstate(await p);
     } catch (e) {
       onerror(e);
+    } finally {
+      busy = false;
     }
   }
+
+  const val = (s: EffectSettings | null | undefined, stage: string, field: string) => s?.[stage]?.[field];
+  const notes = $derived(Object.fromEntries(Object.entries(voice.effect_details).map(([n, c]) => [n, c.join(" · ")])));
+  const tuned = $derived(Object.keys(voice.effect_overrides).length > 0);
+  const on = $derived(voice.effect !== "Off" && !!voice.effect_settings);
 
   let advanced = $state(false);
   let pending: Record<string, number | boolean | string> = {};
@@ -138,57 +34,50 @@
   function tune(path: string, v: number | boolean | string) {
     pending = { ...voice.effect_overrides, ...pending, [path]: v };
     clearTimeout(timer);
-    timer = setTimeout(async () => {
+    timer = setTimeout(() => {
       const send = pending;
       pending = {};
-      try {
-        onstate(await api.setVoiceEffectOverrides(device.id, send));
-      } catch (e) {
-        onerror(e);
-      }
+      run(api.setVoiceEffectOverrides(device.id, send));
     }, 250);
-  }
-  async function reset() {
-    pending = {};
-    try {
-      onstate(await api.setVoiceEffectOverrides(device.id, {}));
-    } catch (e) {
-      onerror(e);
-    }
   }
 
   const fmt = (v: number, unit: string) => `${Math.round(v * 100) / 100}${unit ? ` ${unit}` : ""}`;
 </script>
 
-<section>
-  <h3>Voice effects</h3>
+<div class="tab">
   {#if voice.effects.length === 0}
     <p class="note">The voice effects come from G HUB's settings: add the folder with <code>settings.db</code> in Settings → G HUB files.</p>
   {:else}
-    <div class="effects">
-      {#each voice.effects as e (e.name)}
-        <button class="effect" class:active={voice.effect === e.name} onclick={() => choose(e.name)}>
-          <span class="name">{e.name}</span>
-          {#if e.name !== "Off"}
-            <span class="chips">{#each chips(e.settings) as c}<span>{c}</span>{/each}</span>
-          {/if}
-        </button>
-      {/each}
-    </div>
+    <PresetPicker
+      curated={voice.effects}
+      custom={voice.custom_effects}
+      curatedLabel="Effects"
+      customLabel="Custom effects"
+      selected={voice.effect}
+      {tuned}
+      {notes}
+      disabled={busy}
+      onselect={(name) => run(api.setVoiceEffect(device.id, name === "Off" ? null : name))}
+      onduplicate={() => run(api.voicePresetAction(device.id, "effect", "duplicate"))}
+      onrename={(name, to) => run(api.voicePresetAction(device.id, "effect", "rename", name, to))}
+      ondelete={(name) => run(api.voicePresetAction(device.id, "effect", "delete", name))}
+      onreset={() => run(api.setVoiceEffectOverrides(device.id, {}))}
+    />
 
-    {#if voice.effect !== "Off" && voice.effect_settings}
-      {@const s = voice.effect_settings}
-      <button class="disclose" onclick={() => (advanced = !advanced)} aria-expanded={advanced}>
-        {advanced ? "▾" : "▸"} Adjust {voice.effect}{Object.keys(voice.effect_overrides).length ? " (tuned)" : ""}
-      </button>
+    {#if on}
+      <label class="enable">
+        <input type="checkbox" bind:checked={advanced} />
+        <span>Advanced controls</span>
+      </label>
       {#if advanced}
-        {#each STAGES as st}
+        {@const s = voice.effect_settings}
+        {#each voice.effect_stages as st}
           {@const enabled = !st.enable || val(s, st.stage, st.enable) === true}
           <div class="group">
             <div class="group-head">
               <span>{st.title}</span>
               {#if st.enable}
-                <button class="switch small" class:on={enabled} onclick={() => tune(`${st.stage}.${st.enable}`, !enabled)}>{enabled ? "On" : "Off"}</button>
+                <input type="checkbox" checked={enabled} onchange={() => tune(`${st.stage}.${st.enable}`, !enabled)} aria-label="{st.title} on" />
               {/if}
             </div>
             {#if enabled}
@@ -197,8 +86,8 @@
                 {#if "modes" in c}
                   <label class="slider">
                     <span>{c.label}</span>
-                    <select value={String(v ?? voice.effect_modes[c.modes][0])} onchange={(e) => tune(`${st.stage}.${c.field}`, (e.target as HTMLSelectElement).value)}>
-                      {#each voice.effect_modes[c.modes] as m}<option value={m}>{modeLabel(m)}</option>{/each}
+                    <select value={String(v ?? c.modes[0]?.value)} onchange={(e) => tune(`${st.stage}.${c.field}`, (e.target as HTMLSelectElement).value)}>
+                      {#each c.modes as m}<option value={m.value}>{m.label}</option>{/each}
                     </select>
                     <em></em>
                   </label>
@@ -215,37 +104,24 @@
             {/if}
           </div>
         {/each}
-        <div class="buttons">
-          <button onclick={reset} disabled={!Object.keys(voice.effect_overrides).length}>Reset to {voice.effect}</button>
-          <button onclick={() => onplay(voice.effect)} disabled={!voice.has_test}>Play test with {voice.effect}</button>
-        </div>
       {/if}
     {/if}
     <p class="note">
       Effects run on the virtual microphone, after Blue VO!CE when it's on, and also work with
-      VO!CE off. Like G HUB's, they are for fun and chat, not for a clean voice.
+      Blue VO!CE off.
     </p>
   {/if}
-</section>
+</div>
 
 <style>
-  section { display: flex; flex-direction: column; gap: 12px; }
-  h3 { margin: 0; font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; }
-  .effects { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
-  .effect { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: 9px 11px; }
-  .effect.active { border-color: var(--accent); background: var(--bg-hover); }
-  .effect.active .name { color: var(--accent); }
-  .name { font-weight: 600; font-size: 13px; }
-  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .chips span { font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--bg); color: var(--text-dim); }
-  .disclose { background: none; border: none; padding: 0; text-align: left; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; }
+  .tab { display: flex; flex-direction: column; gap: 16px; }
+  .enable { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; }
+  .enable input { width: 16px; height: 16px; accent-color: var(--accent); }
   .group { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
   .group-head { display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 13px; }
-  .slider { display: grid; grid-template-columns: 130px 1fr 80px; align-items: center; gap: 10px; font-size: 12px; color: var(--text-dim); }
+  .group-head input { accent-color: var(--accent); }
+  .slider { display: grid; grid-template-columns: 110px 1fr 70px; align-items: center; gap: 10px; font-size: 12px; color: var(--text-dim); }
   .slider em { font-style: normal; color: var(--text); text-align: right; }
-  .switch { min-width: 48px; padding: 3px 10px; font-size: 12px; border-radius: 999px; font-weight: 700; }
-  .switch.on { background: var(--text); color: var(--bg); border-color: transparent; }
-  .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
   .note { margin: 0; color: var(--text-faint); font-size: 12px; line-height: 1.5; }
   code { font-size: 11px; }
 </style>

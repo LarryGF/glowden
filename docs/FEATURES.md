@@ -94,6 +94,8 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Blue VO!CE automatic gain control, reference gain | partly | Gain on enable and smart-lock bytes as G HUB sends them; AGC itself unidentified |
 | Mic level meter | built | Raw and processed peaks from the VO!CE plugin (level events every 100 ms) in the VO!CE panel; flags a silent (muted) mic |
 | Blue VO!CE advanced controls | built | Per-stage switches and sliders on top of a preset, applied live |
+| Custom VO!CE presets and effects | built | Duplicate (with fine-tuning), rename, delete; G HUB's "Custom Presets" and "Custom Effects" groups; edits on a custom preset change it in place |
+| Microphone panel layout | built | G HUB's INPUT / Blue VO!CE / EFFECTS tabs with the mic test underneath; the effect controls come from the plugin |
 | Voice effects (21 presets: delay, flanger/phaser, reverb, ring modulation, pitch/formant voice changer) | built | The DTS effect stages in the ClearVoice 2 DLL, after VO!CE on the virtual mic (also without VO!CE); presets, every G HUB control, preview on the test recording. Not yet heard by the user |
 
 ## Profiles, assignments, macros
@@ -147,4 +149,4 @@ and the mouse uses its definition's product photo (downloaded on first use) or d
 | Analytics, accounts, device recommendations | n/a | |
 | G HUB files: folders read in place | built | Settings page: pictures, LED layouts, sounds, VO!CE engine and presets (reads settings.db); a whole Windows drive works too |
 | Add a device (starter definition) | built | Settings page writes `~/.local/share/glowden/drivers/<device>.toml`; definitions otherwise come from device sources |
-| VO!CE preset test (record, compare presets on one take) | built | the plugin's `process` method runs presets offline on the recording |
+| Mic test (record a sample, loop it through the current settings) | built | As G HUB: the plugin's `preview` loops the take to the speakers and follows every settings change live |
