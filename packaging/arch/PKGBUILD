@@ -33,6 +33,9 @@ package() {
   install -Dm644 "$root/packaging/systemd/glowdend.service" "$pkgdir/usr/lib/systemd/user/glowdend.service"
   install -Dm644 "$root/packaging/linux/glowden.desktop" "$pkgdir/usr/share/applications/glowden.desktop"
   install -Dm644 "$root/app/src-tauri/icons/icon.png" "$pkgdir/usr/share/icons/hicolor/256x256/apps/glowden.png"
+  for size in 32x32 128x128 512x512; do
+    install -Dm644 "$root/app/src-tauri/icons/$size.png" "$pkgdir/usr/share/icons/hicolor/$size/apps/glowden.png"
+  done
   install -Dm644 -t "$pkgdir/usr/share/licenses/$pkgname" "$root/LICENSE-MIT" "$root/LICENSE-APACHE"
   install -Dm644 -t "$pkgdir/usr/share/doc/$pkgname" "$root/README.md" "$root/NOTICE.md"
 }

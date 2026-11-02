@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.png" width="360" alt="GlowDen"></p>
+
 # GlowDen
 
 An open device hub for Logitech G peripherals on Linux: lighting, buttons, DPI, profiles,

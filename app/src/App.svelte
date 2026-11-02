@@ -1,4 +1,5 @@
 <script lang="ts">
+  import mark from "./assets/mark.png";
   import { onMount } from "svelte";
   import { api, type Device } from "./lib/api";
   import DevicePage from "./lib/DevicePage.svelte";
@@ -60,7 +61,7 @@
         </button>
       {/if}
     {:else}
-      <span class="brand"><span class="mark"></span>GlowDen</span>
+      <span class="brand"><img class="mark" src={mark} alt="" />GlowDen</span>
       <button class="profile" onclick={() => (profilesPage = true)}>Profile: {activeProfile ?? "Default"}</button>
       <button class="refresh" onclick={refresh} disabled={loading}>{loading ? "Scanning…" : "Rescan"}</button>
       <button class="gear" onclick={() => (settings = true)} aria-label="Settings" title="Settings">
@@ -94,7 +95,7 @@
   .shell { display: grid; grid-template-rows: 56px 1fr; height: 100%; }
   header { display: flex; align-items: center; gap: 14px; padding: 0 20px; border-bottom: 1px solid var(--line); background: var(--bg-raised); }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; letter-spacing: 0.02em; }
-  .mark { width: 18px; height: 18px; border-radius: 50%; border: 4px solid var(--accent); }
+  .mark { width: 26px; height: 26px; }
   .refresh { margin-left: auto; }
   .profile { border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 600; }
   header .back ~ .profile { margin-left: auto; }
