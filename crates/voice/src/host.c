@@ -9,8 +9,13 @@
  *              [f OFF VALUE]... [b OFF VALUE]... [u OFF VALUE]...
  *
  * f/b/u set a float, byte or u32 in the parameter block (offsets in hex, see docs/voice.md).
+ * Settings may be split into sections: "@cv2" (VO!CE) and the voice effect stages "@vocal",
+ * "@flanger", "@ring", "@reverb", "@delay", each followed by its own f/b/u triples. Settings
+ * before any section are VO!CE's; once sections are used, a stage left out is bypassed.
+ * The output is stereo (the reverb and delay stages are).
  * With --process IN.wav OUT.wav it processes a recording instead (48 kHz mono float WAV, as
- * pw-record writes it with --format f32), for comparing presets on the same take.
+ * pw-record writes it with --format f32; the result is stereo), for comparing presets on the
+ * same take.
  */
 #include "pe.h"
 
@@ -58,16 +63,74 @@ static size_t fifo_pop(fifo *f, float *s, size_t n)
     return got;
 }
 
+/* The voice effect stages exported by the same DLL, in processing order. Each takes the
+ * same 6×u32 config as ClearVoice 2 followed by its parameters, and processes its channel
+ * buffers in place. */
+typedef struct {
+    uint32_t c[6];
+    uint8_t params[256];
+} __attribute__((aligned(32))) stage_config;
+
+typedef struct {
+    const char *section, *api;
+    uint32_t channels;
+    void *inst;
+    int (WINAPI *get_size)(const void *, size_t *);
+    int (WINAPI *init)(void *, const void *);
+    int (WINAPI *process)(void *, float **);
+    int (WINAPI *update)(void *, void *);
+    int (WINAPI *flush)(void *);
+    uint8_t defaults[256];
+    int active;
+} stage;
+
+static stage stages[] = {
+    {.section = "@vocal", .api = "VocalChanger", .channels = 1},
+    {.section = "@flanger", .api = "FlangerPhaser", .channels = 1},
+    {.section = "@ring", .api = "RingModulator", .channels = 1},
+    {.section = "@reverb", .api = "Reverb", .channels = 2},
+    {.section = "@delay", .api = "Delay", .channels = 2},
+};
+#define STAGES (sizeof stages / sizeof *stages)
+
 static struct {
     struct pw_main_loop *loop;
     struct pw_stream *capture, *source;
     int (WINAPI *process)(void *, float **);
     void *inst;
-    float *in, *out;
+    float *in, *out, *left, *right;
+    int cv2_active;
     fifo raw, done;
     int primed;
     unsigned long captured, processed, failed, served;
 } st;
+
+/* st.in (one mono block) → interleaved stereo. */
+static int process_block(float *frame)
+{
+    if (st.cv2_active) {
+        if (st.process(st.inst, (float *[]){st.in, st.out})) return -1;
+        memcpy(st.left, st.out, BLOCK * sizeof(float));
+    } else {
+        memcpy(st.left, st.in, BLOCK * sizeof(float));
+    }
+    int split = 0;
+    for (size_t i = 0; i < STAGES; i++) {
+        stage *s = &stages[i];
+        if (!s->active) continue;
+        if (s->channels == 2 && !split) {
+            memcpy(st.right, st.left, BLOCK * sizeof(float));
+            split = 1;
+        }
+        if (s->process(s->inst, (float *[]){st.left, st.right})) return -1;
+    }
+    const float *r = split ? st.right : st.left;
+    for (int n = 0; n < BLOCK; n++) {
+        frame[2 * n] = st.left[n];
+        frame[2 * n + 1] = r[n];
+    }
+    return 0;
+}
 
 static void on_capture(void *data)
 {
@@ -82,8 +145,9 @@ static void on_capture(void *data)
     pw_stream_queue_buffer(st.capture, b);
     while (st.raw.len >= BLOCK) {
         fifo_pop(&st.raw, st.in, BLOCK);
-        if (st.process(st.inst, (float *[]){st.in, st.out}) == 0) {
-            fifo_push(&st.done, st.out, BLOCK);
+        float frame[2 * BLOCK];
+        if (process_block(frame) == 0) {
+            fifo_push(&st.done, frame, 2 * BLOCK);
             st.processed++;
         } else {
             st.failed++;
@@ -100,14 +164,15 @@ static void on_source(void *data)
         pw_stream_queue_buffer(st.source, b);
         return;
     }
-    uint32_t n = d->maxsize / sizeof(float);
-    if (b->requested && b->requested < n) n = b->requested;
+    uint32_t frames = d->maxsize / (2 * sizeof(float));
+    if (b->requested && b->requested < frames) frames = b->requested;
+    uint32_t n = 2 * frames;
     float *dst = d->data;
     /* Start once a little audio is buffered, so the first reads don't underrun. While no app
      * reads the virtual mic, processed audio piles up; keep only the newest so a recording
      * that starts later isn't delayed by it. */
-    if (!st.primed && st.done.len >= 2 * BLOCK) st.primed = 1;
-    size_t keep = n + 2 * BLOCK;
+    if (!st.primed && st.done.len >= 4 * BLOCK) st.primed = 1;
+    size_t keep = n + 4 * BLOCK;
     if (st.done.len > keep) {
         size_t drop = st.done.len - keep;
         st.done.head = (st.done.head + drop) % FIFO;
@@ -115,9 +180,9 @@ static void on_source(void *data)
     }
     size_t got = st.primed ? fifo_pop(&st.done, dst, n) : 0;
     if (got < n) memset(dst + got, 0, (n - got) * sizeof(float));
-    st.served += got;
+    st.served += got / 2;
     d->chunk->offset = 0;
-    d->chunk->stride = sizeof(float);
+    d->chunk->stride = 2 * sizeof(float);
     d->chunk->size = n * sizeof(float);
     pw_stream_queue_buffer(st.source, b);
 }
@@ -142,32 +207,125 @@ static int set_field(uint8_t *params, size_t cap, char kind, const char *off_hex
     return 0;
 }
 
-/* New settings while running: one line of "f|b|u OFF VALUE" triples on stdin, applied on top
- * of the engine defaults (so fields left out go back to default) without restarting. */
+/* Settings: "f|b|u OFF VALUE" triples, optionally in sections (see the top of this file),
+ * each applied on top of that block's defaults. */
 static uint8_t default_params[1024];
 static int (WINAPI *update_params)(void *, void *);
 static char line[16384];
 static size_t line_len;
 static struct spa_source *input_source;
 
-static void apply_line(char *text)
+typedef struct {
+    uint8_t cv2[1024];
+    uint8_t fx[STAGES][256];
+    int cv2_on, fx_on[STAGES];
+} settings;
+
+static int parse_settings(char **tok, int n, settings *out)
 {
-    static uint8_t params[1024];
-    memcpy(params, default_params, sizeof params);
-    char *save = NULL, *tok[3];
-    int n = 0;
-    for (char *t = strtok_r(text, " \t", &save); t; t = strtok_r(NULL, " \t", &save)) {
-        tok[n++] = t;
-        if (n == 3) {
-            if (!strchr("fbu", tok[0][0]) || set_field(params, sizeof params, tok[0][0], tok[1], tok[2])) {
-                fprintf(stderr, "lhub-voice: bad setting %s %s %s\n", tok[0], tok[1], tok[2]);
-                return;
+    memcpy(out->cv2, default_params, sizeof out->cv2);
+    for (size_t i = 0; i < STAGES; i++) {
+        memcpy(out->fx[i], stages[i].defaults, sizeof out->fx[i]);
+        out->fx_on[i] = 0;
+    }
+    int sections = 0, loose = 0;
+    out->cv2_on = 0;
+    uint8_t *target = out->cv2;
+    size_t cap = sizeof out->cv2;
+    for (int i = 0; i < n; i++) {
+        if (tok[i][0] == '@') {
+            sections = 1;
+            if (!strcmp(tok[i], "@cv2")) {
+                out->cv2_on = 1;
+                target = out->cv2;
+                cap = sizeof out->cv2;
+                continue;
             }
-            n = 0;
+            size_t k = 0;
+            while (k < STAGES && strcmp(tok[i], stages[k].section)) k++;
+            if (k == STAGES) {
+                fprintf(stderr, "lhub-voice: unknown section %s\n", tok[i]);
+                return -1;
+            }
+            out->fx_on[k] = 1;
+            target = out->fx[k];
+            cap = sizeof out->fx[k];
+            continue;
+        }
+        if (i + 2 >= n || !strchr("fbu", tok[i][0]) || tok[i][1] || set_field(target, cap, tok[i][0], tok[i + 1], tok[i + 2])) {
+            fprintf(stderr, "lhub-voice: bad setting %s\n", tok[i]);
+            return -1;
+        }
+        if (!sections) loose = 1;
+        i += 2;
+    }
+    if (!sections || loose) out->cv2_on = 1;
+    return 0;
+}
+
+static int stage_start(stage *s, const uint8_t *params)
+{
+    if (!s->inst) {
+        static stage_config cfg;
+        uint32_t c[6] = {RATE, BLOCK, s->channels, RATE, BLOCK, s->channels};
+        memcpy(cfg.c, c, sizeof c);
+        memcpy(cfg.params, params, sizeof cfg.params);
+        size_t size = 0;
+        int r = s->get_size(&cfg, &size);
+        if (r) return r;
+        s->inst = aligned_alloc(64, (size + 63) & ~(size_t)63);
+        memset(s->inst, 0, size);
+        r = s->init(s->inst, &cfg);
+        if (r) {
+            free(s->inst);
+            s->inst = NULL;
+        }
+        return r;
+    }
+    if (!s->active) s->flush(s->inst);
+    static uint8_t p[256] __attribute__((aligned(32)));
+    memcpy(p, params, sizeof p);
+    return s->update(s->inst, p);
+}
+
+/* Returns 0, or the first engine error. A stage that rejects its settings stays as it was. */
+static int apply_settings(settings *set, int initial)
+{
+    int err = 0;
+    if (set->cv2_on && !initial) {
+        int r = update_params(st.inst, set->cv2);
+        if (r) {
+            fprintf(stderr, "lhub-voice: engine rejected the new settings (%d)\n", r);
+            err = r;
         }
     }
-    int r = update_params(st.inst, params);
-    fprintf(stderr, r ? "lhub-voice: engine rejected the new settings (%d)\n" : "lhub-voice: settings updated\n", r);
+    if (!err) st.cv2_active = set->cv2_on;
+    for (size_t i = 0; i < STAGES; i++) {
+        stage *s = &stages[i];
+        if (!set->fx_on[i]) {
+            s->active = 0;
+            continue;
+        }
+        int r = stage_start(s, set->fx[i]);
+        if (r) {
+            fprintf(stderr, "lhub-voice: %s rejected its settings (%d)\n", s->api, r);
+            err = err ? err : r;
+            continue;
+        }
+        s->active = 1;
+    }
+    return err;
+}
+
+static void apply_line(char *text)
+{
+    static char *tok[2048];
+    static settings set;
+    int n = 0;
+    char *save = NULL;
+    for (char *t = strtok_r(text, " \t", &save); t && n < 2048; t = strtok_r(NULL, " \t", &save)) tok[n++] = t;
+    if (parse_settings(tok, n, &set)) return;
+    if (apply_settings(&set, 0) == 0) fprintf(stderr, "lhub-voice: settings updated\n");
 }
 
 static void on_stdin(void *data, int fd, uint32_t mask)
@@ -208,9 +366,17 @@ static const struct spa_pod *mono_format(struct spa_pod_builder *b)
                                                                .channels = 1, .position = {SPA_AUDIO_CHANNEL_MONO}));
 }
 
-/* Offline: run a 48 kHz mono float WAV through the engine. The output is shifted by the
- * engine's latency so it lines up with the input. */
-static int process_file(void *inst, const char *in_path, const char *out_path)
+static const struct spa_pod *stereo_format(struct spa_pod_builder *b)
+{
+    return spa_format_audio_raw_build(
+        b, SPA_PARAM_EnumFormat,
+        &SPA_AUDIO_INFO_RAW_INIT(.format = SPA_AUDIO_FORMAT_F32, .rate = RATE, .channels = 2,
+                                 .position = {SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR}));
+}
+
+/* Offline: run a 48 kHz mono float WAV through the engine into a stereo WAV. The output is
+ * shifted by VO!CE's latency so it lines up with the input. */
+static int process_file(const char *in_path, const char *out_path)
 {
     FILE *in = fopen(in_path, "rb");
     if (!in) {
@@ -243,20 +409,19 @@ static int process_file(void *inst, const char *in_path, const char *out_path)
         fprintf(stderr, "lhub-voice: %s must be 48 kHz mono float\n", in_path);
         return 1;
     }
-    size_t n = len / sizeof(float), latency = 1280;
+    size_t n = len / sizeof(float), latency = st.cv2_active ? 1280 : 0;
     float *samples = calloc(n + latency + BLOCK, sizeof(float));
     n = fread(samples, sizeof(float), n, in);
     fclose(in);
-    float *result = calloc(n + latency + BLOCK, sizeof(float));
+    float *result = calloc(2 * (n + latency + BLOCK), sizeof(float));
     for (size_t at = 0; at < n + latency; at += BLOCK) {
         memcpy(st.in, samples + at, BLOCK * sizeof(float));
-        if (st.process(inst, (float *[]){st.in, st.out})) return 1;
-        memcpy(result + at, st.out, BLOCK * sizeof(float));
+        if (process_block(result + 2 * at)) return 1;
     }
     FILE *out = fopen(out_path, "wb");
     if (!out) return 1;
-    uint32_t bytes = n * sizeof(float), riff = 36 + bytes, fmt_len = 16, byte_rate = RATE * 4;
-    uint16_t fmt_tag = 3, ch = 1, align = 4, bits = 32;
+    uint32_t bytes = 2 * n * sizeof(float), riff = 36 + bytes, fmt_len = 16, byte_rate = RATE * 8;
+    uint16_t fmt_tag = 3, ch = 2, align = 8, bits = 32;
     uint32_t r = RATE;
     fwrite("RIFF", 1, 4, out);
     fwrite(&riff, 4, 1, out);
@@ -270,7 +435,7 @@ static int process_file(void *inst, const char *in_path, const char *out_path)
     fwrite(&bits, 2, 1, out);
     fwrite("data", 1, 4, out);
     fwrite(&bytes, 4, 1, out);
-    fwrite(result + latency, sizeof(float), n, out);
+    fwrite(result + 2 * latency, sizeof(float), 2 * n, out);
     fclose(out);
     return 0;
 }
@@ -301,7 +466,29 @@ int lhub_voice_main(int argc, char **argv)
     defaults(cfg.params);
     memcpy(default_params, cfg.params, sizeof default_params);
     update_params = pe_export(img, "?dtsClearVoice2UpdateParameters@");
+    for (size_t i = 0; i < STAGES; i++) {
+        stage *s = &stages[i];
+        char sym[96];
+#define STAGE_FN(field, fn) \
+        snprintf(sym, sizeof sym, "?dts%s" fn "@", s->api); \
+        *(void **)&s->field = pe_export(img, sym);
+        STAGE_FN(get_size, "GetInstanceSize")
+        STAGE_FN(init, "Init")
+        STAGE_FN(process, "Process")
+        STAGE_FN(update, "UpdateParameters")
+        STAGE_FN(flush, "Flush")
+        int (WINAPI *stage_defaults)(void *);
+        snprintf(sym, sizeof sym, "?dts%sGetDefaultParameters@", s->api);
+        *(void **)&stage_defaults = pe_export(img, sym);
+        if (!s->get_size || !s->init || !s->process || !s->update || !s->flush || !stage_defaults) {
+            fprintf(stderr, "lhub-voice: %s is missing the %s stage\n", argv[1], s->api);
+            return 1;
+        }
+        stage_defaults(s->defaults);
+    }
 
+    static char *tok[2048];
+    int ntok = 0;
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--target") && i + 1 < argc) target = argv[++i];
         else if (!strcmp(argv[i], "--name") && i + 1 < argc) name = argv[++i];
@@ -309,18 +496,13 @@ int lhub_voice_main(int argc, char **argv)
         else if (!strcmp(argv[i], "--process") && i + 2 < argc) {
             process_in = argv[++i];
             process_out = argv[++i];
-        }
-        else if (strchr("fbu", argv[i][0]) && !argv[i][1] && i + 2 < argc) {
-            if (set_field(cfg.params, sizeof cfg.params, argv[i][0], argv[i + 1], argv[i + 2])) {
-                fprintf(stderr, "lhub-voice: offset %s out of range\n", argv[i + 1]);
-                return 2;
-            }
-            i += 2;
-        } else {
-            fprintf(stderr, "lhub-voice: bad argument %s\n", argv[i]);
-            return 2;
+        } else if (ntok < 2048) {
+            tok[ntok++] = argv[i];
         }
     }
+    static settings initial;
+    if (parse_settings(tok, ntok, &initial)) return 2;
+    memcpy(cfg.params, initial.cv2, sizeof cfg.params);
 
     size_t size = 0;
     if (get_size(&cfg, &size)) {
@@ -336,7 +518,10 @@ int lhub_voice_main(int argc, char **argv)
     }
     st.in = aligned_alloc(32, BLOCK * sizeof(float));
     st.out = aligned_alloc(32, BLOCK * sizeof(float));
-    if (process_in) return process_file(st.inst, process_in, process_out);
+    st.left = aligned_alloc(32, BLOCK * sizeof(float));
+    st.right = aligned_alloc(32, BLOCK * sizeof(float));
+    apply_settings(&initial, 1);
+    if (process_in) return process_file(process_in, process_out);
 
     pw_init(&argc, &argv);
     st.loop = pw_main_loop_new(NULL);
@@ -370,7 +555,7 @@ int lhub_voice_main(int argc, char **argv)
     pw_stream_connect(st.capture, PW_DIRECTION_INPUT, PW_ID_ANY,
                       PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS, params, 1);
     b = (struct spa_pod_builder)SPA_POD_BUILDER_INIT(buf, sizeof buf);
-    params[0] = mono_format(&b);
+    params[0] = stereo_format(&b);
     pw_stream_connect(st.source, PW_DIRECTION_OUTPUT, PW_ID_ANY, PW_STREAM_FLAG_MAP_BUFFERS, params, 1);
 
     fprintf(stderr, "lhub-voice: running as \"%s\"%s%s\n", description, target ? " from " : "", target ? target : "");

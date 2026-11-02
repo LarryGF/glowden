@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { api, type Device, type VoiceState } from "../api";
+  import VoiceEffects from "./VoiceEffects.svelte";
 
   let { device, onerror }: { device: Device; onerror: (e: unknown) => void } = $props();
 
@@ -92,10 +93,10 @@
     }
   }
 
-  async function play(preset: string | null) {
+  async function play(preset: string | null, effect: string | null = null) {
     try {
-      await api.voiceTestPlay(preset);
-      playing = preset ?? "original";
+      await api.voiceTestPlay(preset, effect);
+      playing = effect ? `${preset ?? ""}+${effect}` : (preset ?? "original");
     } catch (e) {
       onerror(e);
     }
@@ -188,6 +189,9 @@
         {/if}
       </section>
 
+      <VoiceEffects {device} {state} onstate={(s) => (state = s)} {onerror}
+        onplay={(effect) => play(state!.enabled ? state!.preset : null, effect)} />
+
       <section class="test">
         <h3>Test</h3>
         <p class="note">Record a few seconds, then compare the original with any preset on the same take. Use headphones.</p>
@@ -197,6 +201,11 @@
           <button onclick={() => play(state!.preset)} disabled={!state.has_test || recording > 0 || !state.preset} class:active={playing !== null && playing !== "original"}>
             Play with {state.preset ?? "preset"}
           </button>
+          {#if state.effect !== "Off"}
+            <button onclick={() => play(state!.enabled ? state!.preset : null, state!.effect)} disabled={!state.has_test || recording > 0}>
+              Play with {state.enabled ? `${state.preset} + ` : ""}{state.effect}
+            </button>
+          {/if}
           <button onclick={stopPlaying} disabled={!playing}>Stop</button>
         </div>
       </section>
@@ -208,7 +217,7 @@
         </button>
       </label>
 
-      {#if state.enabled}
+      {#if state.enabled || state.effect !== "Off"}
         <p class="status" class:ok={state.running}>
           {#if state.running}
             Running. Choose <strong>{device.name} (Blue VO!CE)</strong> as the microphone in your apps.

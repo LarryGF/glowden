@@ -287,7 +287,7 @@ fn manage(shared: Shared) {
             eprintln!("{}: {} connected, applying {:?}", f.id, f.name, cfg);
             let id = f.id.clone();
             let driver = st.drivers.for_product(f.device.info.product).cloned();
-            let voice = cfg.voice.clone().filter(|v| v.enabled);
+            let voice = cfg.voice.clone().filter(|v| v.active());
             st.workers
                 .insert(id.clone(), worker::spawn(f, cfg, driver.clone()));
             if let (Some(v), Some(def)) = (voice, driver.and_then(|d| d.voice)) {
@@ -374,8 +374,12 @@ enum Request {
         id: String,
         seconds: u64,
     },
+    /// Plays the test recording through a VO!CE preset and/or a voice effect (neither: as
+    /// recorded).
     VoiceTestPlay {
         preset: Option<String>,
+        #[serde(default)]
+        effect: Option<String>,
     },
     VoiceTestStop,
     LightingPresets,
@@ -450,6 +454,15 @@ enum Request {
     },
     /// Fine-tuning on top of the current preset (an empty map resets to the preset).
     SetVoiceOverrides {
+        id: String,
+        overrides: std::collections::BTreeMap<String, Value>,
+    },
+    SetVoiceEffect {
+        id: String,
+        effect: Option<String>,
+    },
+    /// Fine-tuning on top of the current effect preset (an empty map resets it).
+    SetVoiceEffectOverrides {
         id: String,
         overrides: std::collections::BTreeMap<String, Value>,
     },
@@ -530,19 +543,25 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
                 voice_def(&lock.lock().unwrap(), &id).ok_or("this device has no Blue VO!CE")?;
             voice::record_test(&def, seconds).map(|_| Value::Null)
         }
-        Request::VoiceTestPlay { preset } => {
-            let settings = match preset {
-                Some(name) => Some(
-                    voice::presets()
+        Request::VoiceTestPlay { preset, effect } => {
+            let find = |list: Vec<(String, Value)>,
+                        name: Option<String>|
+             -> Result<Option<Value>, String> {
+                match name {
+                    Some(name) => list
                         .into_iter()
                         .find(|(n, _)| *n == name)
-                        .map(|(_, s)| s)
-                        .ok_or("no such preset")?,
-                ),
-                None => None,
+                        .map(|(_, s)| Some(s))
+                        .ok_or_else(|| format!("no preset called {name}")),
+                    None => Ok(None),
+                }
             };
+            let settings = find(voice::presets(), preset)?;
+            let effects = find(voice::effect_presets(), effect)?;
+            let args = (settings.is_some() || effects.is_some())
+                .then(|| voice::host_args(settings.as_ref(), effects.as_ref()));
             let mut st = lock.lock().unwrap();
-            st.voice.play_test(settings.as_ref()).map(|_| Value::Null)
+            st.voice.play_test(args).map(|_| Value::Null)
         }
         Request::VoiceTestStop => {
             lock.lock().unwrap().voice.stop_test();
@@ -751,9 +770,18 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
                 enabled,
                 preset,
                 default_mic,
-                overrides: Default::default(),
+                ..Default::default()
             },
         ),
+        Request::SetVoiceEffect { id, effect } => update_voice(shared, &id, |v| {
+            if v.effect != effect {
+                v.effect_overrides.clear();
+            }
+            v.effect = effect;
+        }),
+        Request::SetVoiceEffectOverrides { id, overrides } => {
+            update_voice(shared, &id, |v| v.effect_overrides = overrides)
+        }
         Request::SetVoiceOverrides { id, overrides } => {
             let mut st = lock.lock().unwrap();
             let def = voice_def(&st, &id).ok_or("this device has no Blue VO!CE")?;
@@ -769,7 +797,7 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
                 v.clone()
             };
             st.config.save();
-            if cfg.enabled {
+            if cfg.active() {
                 start_voice(&mut st, &id, &def, &cfg);
             }
             Ok(voice_state(&mut st, &id))
@@ -941,8 +969,54 @@ fn voice_settings(cfg: &VoiceConfig) -> Value {
     voice::merged(&settings, &cfg.overrides)
 }
 
+/// The chosen voice effect with its fine-tuning, when effects are on.
+fn effect_settings(cfg: &VoiceConfig) -> Option<Value> {
+    let name = cfg.effect.as_ref().filter(|_| cfg.effect_on())?;
+    let (_, s) = voice::effect_presets()
+        .into_iter()
+        .find(|(n, _)| n == name)?;
+    Some(voice::merged(&s, &cfg.effect_overrides))
+}
+
 fn start_voice(st: &mut State, id: &str, def: &drivers::VoiceDef, cfg: &VoiceConfig) {
-    st.voice.apply(id, def, &voice_settings(cfg));
+    let settings = cfg.enabled.then(|| voice_settings(cfg));
+    let args = voice::host_args(settings.as_ref(), effect_settings(cfg).as_ref());
+    st.voice.apply(id, def, &args);
+}
+
+/// Changes the voice effect part of a device's VO!CE config and applies it.
+fn update_voice(
+    shared: &Shared,
+    id: &str,
+    change: impl FnOnce(&mut VoiceConfig),
+) -> Result<Value, String> {
+    let mut st = shared.0.lock().unwrap();
+    let def = voice_def(&st, id).ok_or("this device has no Blue VO!CE")?;
+    let cfg = {
+        let v = st
+            .config
+            .devices
+            .entry(id.to_string())
+            .or_default()
+            .voice
+            .get_or_insert_with(|| VoiceConfig {
+                default_mic: true,
+                ..Default::default()
+            });
+        change(v);
+        v.clone()
+    };
+    st.config.save();
+    if cfg.active() {
+        start_voice(&mut st, id, &def, &cfg);
+        if cfg.default_mic {
+            voice::make_default();
+        }
+    } else {
+        st.voice.stop(id);
+        voice::release_default(&def);
+    }
+    Ok(voice_state(&mut st, id))
 }
 
 fn voice_state(st: &mut State, id: &str) -> Value {
@@ -973,6 +1047,15 @@ fn voice_state(st: &mut State, id: &str) -> Value {
             json!({ "path": path, "group": group, "label": label, "min": min, "max": max, "step": step, "unit": unit })
         }).collect::<Vec<_>>(),
         "switches": voice::SWITCHES.iter().map(|(group, path)| json!({ "group": group, "path": path })).collect::<Vec<_>>(),
+        "effects": voice::effect_presets().into_iter().map(|(n, s)| json!({ "name": n, "settings": s })).collect::<Vec<_>>(),
+        "effect": cfg.effect.clone().unwrap_or_else(|| "Off".into()),
+        "effect_settings": effect_settings(&cfg),
+        "effect_overrides": cfg.effect_overrides,
+        "effect_modes": {
+            "vocalMode": voice::VOCAL_MODES, "phaserMode": voice::PHASER_MODES, "shapeMode": voice::SHAPE_MODES,
+            "reflectionMode": voice::REFLECTION_MODES, "inputMode": voice::INPUT_MODES,
+            "feedbackMode": voice::FEEDBACK_MODES, "feedbackTimbre": voice::FEEDBACK_TIMBRES,
+        },
         "preset": cfg.preset.or_else(|| presets.first().cloned()),
         "running": running,
         "error": error,
@@ -985,6 +1068,10 @@ fn set_voice(shared: &Shared, id: &str, cfg: VoiceConfig) -> Result<Value, Strin
         let def = voice_def(&st, id).ok_or("this device has no Blue VO!CE")?;
         let previous = st.config.devices.get(id).and_then(|c| c.voice.clone());
         let mut cfg = cfg;
+        if let Some(p) = &previous {
+            cfg.effect = p.effect.clone();
+            cfg.effect_overrides = p.effect_overrides.clone();
+        }
         // Fine-tuning belongs to the preset it was made on.
         if previous.as_ref().map(|p| &p.preset) == Some(&cfg.preset) && cfg.overrides.is_empty() {
             cfg.overrides = previous
@@ -994,12 +1081,12 @@ fn set_voice(shared: &Shared, id: &str, cfg: VoiceConfig) -> Result<Value, Strin
         }
         st.config.devices.entry(id.to_string()).or_default().voice = Some(cfg.clone());
         st.config.save();
-        if cfg.enabled {
+        if cfg.active() {
             start_voice(&mut st, id, &def, &cfg);
         } else {
             st.voice.stop(id);
         }
-        if cfg.enabled && cfg.default_mic {
+        if cfg.active() && cfg.default_mic {
             voice::make_default();
         } else {
             voice::release_default(&def);

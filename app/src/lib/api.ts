@@ -24,7 +24,15 @@ export type VoiceState = {
     boost: number | null;
     input_gain: number | null;
   }>;
+  effects: { name: string; settings: EffectSettings }[];
+  effect: string;
+  effect_settings: EffectSettings | null;
+  effect_overrides: Record<string, number | boolean | string>;
+  effect_modes: Record<string, string[]>;
 };
+
+/** G HUB's voice effect settings: stage → field → value. */
+export type EffectSettings = Record<string, Record<string, number | boolean | string>>;
 
 export type AppInfo = {
   settings: { ghub_paths: string[]; low_battery_alert: boolean; lighting_off_when_locked: boolean; swap_mouse_buttons: boolean; low_battery_lighting: boolean };
@@ -143,7 +151,11 @@ export const api = {
     request<VoiceState>({ cmd: "set_voice_overrides", id, overrides }),
   getMuted: (id: string) => request<boolean>({ cmd: "get_muted", id }),
   voiceTestRecord: (id: string, seconds: number) => request<void>({ cmd: "voice_test_record", id, seconds }),
-  voiceTestPlay: (preset: string | null) => request<void>({ cmd: "voice_test_play", preset }),
+  voiceTestPlay: (preset: string | null, effect: string | null = null) =>
+    request<void>({ cmd: "voice_test_play", preset, effect }),
+  setVoiceEffect: (id: string, effect: string | null) => request<VoiceState>({ cmd: "set_voice_effect", id, effect }),
+  setVoiceEffectOverrides: (id: string, overrides: Record<string, number | boolean | string>) =>
+    request<VoiceState>({ cmd: "set_voice_effect_overrides", id, overrides }),
   voiceTestStop: () => request<void>({ cmd: "voice_test_stop" }),
   appSettings: () => request<AppInfo>({ cmd: "app_settings" }),
   profiles: () => request<ProfilesInfo>({ cmd: "profiles" }),

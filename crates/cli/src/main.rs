@@ -581,5 +581,34 @@ fn import_voice_presets(settings: &std::path::Path) -> CmdResult {
     let to = dir.join("presets.json");
     std::fs::write(&to, serde_json::to_vec_pretty(&presets)?)?;
     println!("{} Blue VO!CE presets -> {}", presets.len(), to.display());
+
+    // Voice effects: AUDIO_EFFECTS_SETTINGS cards, named "NN_Name" with NN giving G HUB's order.
+    let mut effects: Vec<(String, serde_json::Value)> = json["cards"]["cards"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|c| c["attribute"] == "AUDIO_EFFECTS_SETTINGS")
+        .filter_map(|c| {
+            let name = c["audioEffectsSettings"]["description"]["name"].as_str()?;
+            Some((
+                name.to_string(),
+                c["audioEffectsSettings"]["settings"].clone(),
+            ))
+        })
+        .collect();
+    effects.sort_by(|a, b| a.0.cmp(&b.0));
+    if !effects.is_empty() {
+        let list: Vec<serde_json::Value> = effects
+            .into_iter()
+            .map(|(name, settings)| {
+                let shown = name.split_once('_').map_or(name.as_str(), |(_, n)| n);
+                let shown = if shown == "FX_OFF" { "Off" } else { shown };
+                serde_json::json!({ "name": shown, "settings": settings })
+            })
+            .collect();
+        let to = dir.join("effects.json");
+        std::fs::write(&to, serde_json::to_vec_pretty(&list)?)?;
+        println!("{} voice effect presets -> {}", list.len(), to.display());
+    }
     Ok(())
 }

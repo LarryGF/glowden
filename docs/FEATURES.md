@@ -93,7 +93,7 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Smart lock | built | G HUB's exact bytes sent with VO!CE changes (`00 05 07 00 ae 00 00 02`) |
 | Blue VO!CE automatic gain control, reference gain | partly | Gain on enable and smart-lock bytes as G HUB sends them; AGC itself unidentified |
 | Blue VO!CE advanced controls | built | Per-stage switches and sliders on top of a preset, applied live |
-| Voice effects (21 presets: delay, flanger/phaser, reverb, ring modulation, pitch/formant voice changer) | planned | `AUDIO_EFFECTS_SETTINGS` cards for `yeti-gx`; engine is the DTS Studio APO in `driver_audio_apo` |
+| Voice effects (21 presets: delay, flanger/phaser, reverb, ring modulation, pitch/formant voice changer) | built | The DTS effect stages in the ClearVoice 2 DLL, after VO!CE on the virtual mic (also without VO!CE); presets, every G HUB control, preview on the test recording (docs/voice.md). Not yet heard by the user |
 
 ## Profiles, assignments, macros
 

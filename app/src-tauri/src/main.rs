@@ -75,7 +75,13 @@ async fn request(req: Value) -> Result<Value, String> {
 fn tray_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
     let menu = Menu::new(app)?;
-    menu.append(&MenuItem::with_id(app, "open", "Open lhub", true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "open",
+        "Open lhub",
+        true,
+        None::<&str>,
+    )?)?;
     menu.append(&PredefinedMenuItem::separator(app)?)?;
     let devices = send(&serde_json::json!({ "cmd": "list" })).unwrap_or_default();
     for d in devices.as_array().into_iter().flatten() {
@@ -90,11 +96,25 @@ fn tray_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::W
     let profiles = send(&serde_json::json!({ "cmd": "profiles" })).unwrap_or_default();
     let active = profiles["active"].as_str();
     let sub = Submenu::new(app, "Profile", true)?;
-    sub.append(&CheckMenuItem::with_id(app, "profile:", "Default", true, active.is_none(), None::<&str>)?)?;
+    sub.append(&CheckMenuItem::with_id(
+        app,
+        "profile:",
+        "Default",
+        true,
+        active.is_none(),
+        None::<&str>,
+    )?)?;
     for p in profiles["profiles"].as_array().into_iter().flatten() {
         let name = p["name"].as_str().unwrap_or_default();
         let id = format!("profile:{name}");
-        sub.append(&CheckMenuItem::with_id(app, id, name, true, active == Some(name), None::<&str>)?)?;
+        sub.append(&CheckMenuItem::with_id(
+            app,
+            id,
+            name,
+            true,
+            active == Some(name),
+            None::<&str>,
+        )?)?;
     }
     menu.append(&PredefinedMenuItem::separator(app)?)?;
     menu.append(&sub)?;
@@ -130,7 +150,8 @@ fn main() {
                     id if id.starts_with("profile:") => {
                         let name = &id["profile:".len()..];
                         let name = (!name.is_empty()).then(|| name.to_string());
-                        let _ = send(&serde_json::json!({ "cmd": "set_active_profile", "name": name }));
+                        let _ =
+                            send(&serde_json::json!({ "cmd": "set_active_profile", "name": name }));
                     }
                     _ => {}
                 })
@@ -143,10 +164,12 @@ fn main() {
                 }
             };
             TRAY.store(true, std::sync::atomic::Ordering::Relaxed);
-            std::thread::spawn(move || loop {
-                std::thread::sleep(Duration::from_secs(20));
-                if let Ok(menu) = tray_menu(&handle) {
-                    let _ = tray.set_menu(Some(menu));
+            std::thread::spawn(move || {
+                loop {
+                    std::thread::sleep(Duration::from_secs(20));
+                    if let Ok(menu) = tray_menu(&handle) {
+                        let _ = tray.set_menu(Some(menu));
+                    }
                 }
             });
             Ok(())

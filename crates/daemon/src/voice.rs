@@ -96,6 +96,204 @@ pub fn engine_args(settings: &Value) -> Vec<String> {
     args
 }
 
+/// Voice effect presets imported from G HUB: (name, settings), "Off" first.
+pub fn effect_presets() -> Vec<(String, Value)> {
+    let Ok(bytes) = std::fs::read(dir().join("effects.json")) else {
+        return Vec::new();
+    };
+    let list: Vec<Value> = serde_json::from_slice(&bytes).unwrap_or_default();
+    list.into_iter()
+        .filter_map(|p| Some((p["name"].as_str()?.to_string(), p["settings"].clone())))
+        .collect()
+}
+
+/// Voice effect stage → host section, the field enabling it, and its fields: (preset field,
+/// offset, kind, enum names in value order). The layouts follow G HUB's field order, which
+/// matches each stage's default parameters; offsets and the enable bytes were checked on a
+/// test tone (tools/voice-probes/stage_probe). Fields G HUB leaves out are 0/false/the first
+/// enum value, as in its settings format.
+type EffectField = (&'static str, u16, char, &'static [&'static str]);
+const EFFECTS: &[(&str, &str, Option<&str>, u16, &[EffectField])] = &[
+    (
+        "vocalChanger",
+        "@vocal",
+        None,
+        0x30,
+        &[
+            ("vocalMode1", 0x00, 'u', VOCAL_MODES),
+            ("voiceModFactor1", 0x04, 'f', &[]),
+            ("vocalMode2", 0x08, 'u', VOCAL_MODES),
+            ("voiceModFactor2", 0x0c, 'f', &[]),
+            ("voiceGain1", 0x10, 'f', &[]),
+            ("voiceGain2", 0x14, 'f', &[]),
+            ("chorusEnabled", 0x18, 'b', &[]),
+            ("chorusDelay", 0x1c, 'f', &[]),
+            ("chorusDelayMod", 0x20, 'f', &[]),
+            ("chorusDelayModRate", 0x24, 'f', &[]),
+            ("chorusPitchMod", 0x28, 'f', &[]),
+            ("chorusPitchModRate", 0x2c, 'f', &[]),
+        ],
+    ),
+    (
+        "flangerPhaser",
+        "@flanger",
+        Some("enabled"),
+        0x10,
+        &[
+            ("phaserMode", 0x00, 'u', PHASER_MODES),
+            ("depth", 0x04, 'f', &[]),
+            ("rate", 0x08, 'f', &[]),
+        ],
+    ),
+    (
+        "ringModulation",
+        "@ring",
+        Some("enabled"),
+        0x10,
+        &[
+            ("mix", 0x00, 'f', &[]),
+            ("shapeMode", 0x04, 'u', SHAPE_MODES),
+            ("carrierFrequency", 0x08, 'f', &[]),
+        ],
+    ),
+    (
+        "reverb",
+        "@reverb",
+        Some("enabled"),
+        0x24,
+        &[
+            ("earlyLateMix", 0x00, 'f', &[]),
+            ("reflectionMode", 0x04, 'u', REFLECTION_MODES),
+            ("reflectionLowPassFrequency", 0x08, 'f', &[]),
+            ("roomSize", 0x0c, 'f', &[]),
+            ("mix", 0x1c, 'f', &[]),
+        ],
+    ),
+    (
+        "delay",
+        "@delay",
+        Some("enabled"),
+        0x20,
+        &[
+            ("inputMode", 0x00, 'u', INPUT_MODES),
+            ("feedbackMode", 0x04, 'u', FEEDBACK_MODES),
+            ("feedbackTimbre", 0x08, 'u', FEEDBACK_TIMBRES),
+            ("leftDelay", 0x0c, 'f', &[]),
+            ("rightDelay", 0x10, 'f', &[]),
+            ("feedback", 0x14, 'f', &[]),
+            ("mix", 0x18, 'f', &[]),
+        ],
+    ),
+];
+
+pub const VOCAL_MODES: &[&str] = &[
+    "VOCAL_MODE_OFF",
+    "VOCAL_MODE_FORMANT_WARP",
+    "VOCAL_MODE_PITCH_SHIFT",
+    "VOCAL_MODE_FORMANT_SHIFT",
+    "VOCAL_MODE_ROBOT",
+    "VOCAL_MODE_WHISPEZ",
+    "VOCAL_MODE_NOICE",
+    "VOCAL_MODE_GROWL",
+    "VOCAL_MODE_AIR",
+    "VOCAL_MODE_ETHER",
+    "VOCAL_MODE_HOUSEOTRON",
+    "VOCAL_MODE_FUNKBOT",
+    "VOCAL_MODE_TALKBOX",
+    "VOCAL_MODE_SUBBY",
+    "VOCAL_MODE_NO_TREBLE",
+];
+pub const PHASER_MODES: &[&str] = &[
+    "PHASER_MODE_FLANGER_UP",
+    "PHASER_MODE_FLANGER_DOWN",
+    "PHASER_MODE_FLANGER_OSCILLATE",
+    "PHASER_MODE_PHASER_STUN",
+    "PHASER_MODE_PHASER_HEAVY",
+    "PHASER_MODE_PHASER_KILL",
+];
+pub const SHAPE_MODES: &[&str] = &[
+    "SHAPE_MODE_SINE",
+    "SHAPE_MODE_TRIANGLE",
+    "SHAPE_MODE_SAW_TOOTH",
+    "SHAPE_MODE_SQUARE",
+    "SHAPE_MODE_HALFWAVERECTIFIER",
+];
+pub const REFLECTION_MODES: &[&str] = &[
+    "REFLECTION_MODE_NONE",
+    "REFLECTION_MODE_TIGHT",
+    "REFLECTION_MODE_MIDMIX",
+    "REFLECTION_MODE_LARGEDIFF",
+    "REFLECTION_MODE_ECHO",
+    "REFLECTION_MODE_ECHO2",
+    "REFLECTION_MODE_ECHO3",
+    "REFLECTION_MODE_FLUTTER",
+    "REFLECTION_MODE_ST_FLUTTER",
+    "REFLECTION_MODE_ECHO_FLUTTER",
+];
+pub const INPUT_MODES: &[&str] = &[
+    "INPUT_MODE_NORMAL",
+    "INPUT_MODE_CROSSED",
+    "INPUT_MODE_LEFT",
+    "INPUT_MODE_RIGHT",
+];
+pub const FEEDBACK_MODES: &[&str] = &["FEEDBACK_MODE_NORMAL", "FEEDBACK_MODE_CROSSED"];
+pub const FEEDBACK_TIMBRES: &[&str] = &[
+    "FEEDBACK_TIMBRE_FULL",
+    "FEEDBACK_TIMBRE_DARK",
+    "FEEDBACK_TIMBRE_BRIGHT",
+];
+
+/// Host sections for the voice effects in `effects` (G HUB's effect settings format); a
+/// stage that is off is left out, which bypasses it.
+pub fn effect_args(effects: &Value) -> Vec<String> {
+    let mut args = Vec::new();
+    for &(stage, section, enabled, enable_at, fields) in EFFECTS {
+        let o = &effects[stage];
+        let on = match enabled {
+            Some(key) => o[key].as_bool().unwrap_or(false),
+            // The voice changer has no switch: it is on when a voice or the chorus is.
+            None => {
+                o["chorusEnabled"].as_bool().unwrap_or(false)
+                    || ["vocalMode1", "vocalMode2"]
+                        .iter()
+                        .any(|k| o[k].as_str().is_some_and(|m| m != "VOCAL_MODE_OFF"))
+            }
+        };
+        if !on {
+            continue;
+        }
+        args.push(section.to_string());
+        for &(name, offset, kind, names) in fields {
+            let v = &o[name];
+            let value = match kind {
+                'u' => names
+                    .iter()
+                    .position(|n| v.as_str() == Some(n))
+                    .unwrap_or(0)
+                    .to_string(),
+                'b' => (v.as_bool().unwrap_or(false) as u8).to_string(),
+                _ => v.as_f64().unwrap_or(0.0).to_string(),
+            };
+            args.extend([kind.to_string(), format!("{offset:02x}"), value]);
+        }
+        args.extend(["b".into(), format!("{enable_at:02x}"), "1".into()]);
+    }
+    args
+}
+
+/// Every host argument for a device: VO!CE (when on) and the voice effects.
+pub fn host_args(voice: Option<&Value>, effects: Option<&Value>) -> Vec<String> {
+    let mut args = Vec::new();
+    if let Some(v) = voice {
+        args.push("@cv2".to_string());
+        args.extend(engine_args(v));
+    }
+    if let Some(e) = effects {
+        args.extend(effect_args(e));
+    }
+    args
+}
+
 /// The PipeWire source whose node name contains `pattern` (e.g. the Yeti GX's ALSA input).
 fn source_node(pattern: &str) -> Option<String> {
     let out = Command::new("pw-dump")
@@ -409,13 +607,13 @@ pub struct Voice {
 impl Voice {
     /// Runs the virtual microphone with `settings`: live update when it already runs (no
     /// interruption for apps), otherwise a fresh start.
-    pub fn apply(&mut self, id: &str, def: &VoiceDef, settings: &Value) {
+    pub fn apply(&mut self, id: &str, def: &VoiceDef, args: &[String]) {
         if let Some(child) = self.running.get_mut(id)
             && matches!(child.try_wait(), Ok(None))
             && let Some(stdin) = child.stdin.as_mut()
         {
             use std::io::Write;
-            let line = engine_args(settings).join(" ") + "\n";
+            let line = args.join(" ") + "\n";
             if stdin
                 .write_all(line.as_bytes())
                 .and_then(|_| stdin.flush())
@@ -424,12 +622,12 @@ impl Voice {
                 return;
             }
         }
-        self.start(id, def, settings);
+        self.start(id, def, args);
     }
 
-    pub fn start(&mut self, id: &str, def: &VoiceDef, settings: &Value) {
+    pub fn start(&mut self, id: &str, def: &VoiceDef, args: &[String]) {
         self.stop(id);
-        match Self::spawn(def, settings) {
+        match Self::spawn(def, args) {
             Ok(child) => {
                 self.errors.remove(id);
                 self.running.insert(id.to_string(), child);
@@ -441,7 +639,7 @@ impl Voice {
         }
     }
 
-    fn spawn(def: &VoiceDef, settings: &Value) -> Result<Child, String> {
+    fn spawn(def: &VoiceDef, args: &[String]) -> Result<Child, String> {
         let dll = engine().ok_or("the engine isn't imported yet (lhub import-ghub)")?;
         let source = source_node(&def.source)
             .ok_or_else(|| format!("no PipeWire source matching \"{}\"", def.source))?;
@@ -449,28 +647,28 @@ impl Voice {
             .arg(dll)
             .args(["--target", &source, "--name", "lhub-bluevoice"])
             .args(["--description", &def.description])
-            .args(engine_args(settings))
+            .args(args)
             // Later settings arrive on stdin, applied without restarting.
             .stdin(Stdio::piped())
             .spawn()
             .map_err(|e| format!("cannot start lhub-voice: {e}"))
     }
 
-    /// Plays the test recording as recorded (`None`) or through a preset.
-    pub fn play_test(&mut self, settings: Option<&Value>) -> Result<(), String> {
+    /// Plays the test recording as recorded (`None`) or with these host arguments.
+    pub fn play_test(&mut self, args: Option<Vec<String>>) -> Result<(), String> {
         self.stop_test();
         let raw = test_dir().join("raw.wav");
         if !raw.exists() {
             return Err("record a test first".into());
         }
-        let file = match settings {
+        let file = match args {
             None => raw,
             Some(s) => {
                 let out = test_dir().join("processed.wav");
                 let dll = engine().ok_or("the engine isn't imported yet")?;
                 let status = Command::new(binary())
                     .arg(dll)
-                    .args(engine_args(s))
+                    .args(s)
                     .arg("--process")
                     .args([&raw, &out])
                     .stdin(Stdio::null())

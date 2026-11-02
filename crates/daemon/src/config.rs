@@ -181,6 +181,24 @@ pub struct VoiceConfig {
     /// changes.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub overrides: BTreeMap<String, serde_json::Value>,
+    /// Voice effect preset (G HUB's voice effects); none or "Off" means no effects. Effects
+    /// work with VO!CE off too.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect: Option<String>,
+    /// Fine-tuning on top of the effect preset, as `overrides`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub effect_overrides: BTreeMap<String, serde_json::Value>,
+}
+
+impl VoiceConfig {
+    pub fn effect_on(&self) -> bool {
+        self.effect.as_deref().is_some_and(|e| e != "Off")
+    }
+
+    /// Whether the virtual microphone runs at all.
+    pub fn active(&self) -> bool {
+        self.enabled || self.effect_on()
+    }
 }
 
 #[derive(Serialize, Deserialize, Default)]
