@@ -250,15 +250,26 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
         Request::SyncLighting { from } => sync_lighting(shared, &from),
         Request::MouseInfo { id } => ask(shared, &id, Cmd::MouseInfo),
         Request::DeviceLayout { id } => {
-            let st = lock.lock().unwrap();
-            let v = st.workers.get(&id).map(|h| h.view.lock().unwrap().clone());
-            Ok(json!(v.and_then(|v| view::layout(
-                v.model.as_deref()?,
-                v.hid_usage_zones,
-                v.first_view,
-                v.fallback_picture.as_deref(),
-                v.picture_clip.as_deref()
-            ))))
+            // Cloned out so a first-time photo download doesn't hold the state lock.
+            let v = {
+                let st = lock.lock().unwrap();
+                st.workers.get(&id).map(|h| h.view.lock().unwrap().clone())
+            };
+            Ok(json!(v.and_then(|v| {
+                let model = v.model.as_deref()?;
+                v.photo
+                    .as_ref()
+                    .and_then(|p| view::photo_layout(model, p))
+                    .or_else(|| {
+                        view::layout(
+                            model,
+                            v.hid_usage_zones,
+                            v.first_view,
+                            v.fallback_picture.as_deref(),
+                            v.picture_clip.as_deref(),
+                        )
+                    })
+            })))
         }
         Request::LightingState { id } => {
             let st = lock.lock().unwrap();

@@ -44,6 +44,8 @@ pub struct DeviceView {
     pub fallback_picture: Option<std::path::PathBuf>,
     #[serde(skip)]
     pub picture_clip: Option<String>,
+    #[serde(skip)]
+    pub photo: Option<crate::drivers::Photo>,
 }
 
 #[derive(Serialize, Clone)]
@@ -156,6 +158,7 @@ pub fn build(f: &mut Found, driver: Option<&crate::drivers::Driver>) -> DeviceVi
         first_view: driver.is_some_and(|d| d.layout.lighting_view.as_deref() == Some("first")),
         fallback_picture: driver.and_then(crate::drivers::Registry::fallback_picture),
         picture_clip: driver.and_then(|d| d.layout.picture_clip.clone()),
+        photo: driver.and_then(|d| d.layout.photo.clone()),
     }
 }
 
@@ -224,6 +227,57 @@ fn image_size(bytes: &[u8]) -> Option<(u32, u32)> {
         )),
         _ => None,
     }
+}
+
+/// A driver's product photo with its LED regions. The photo is downloaded once into the
+/// device's data directory; None when it can't be fetched (offline) or doesn't match.
+pub fn photo_layout(model: &str, photo: &crate::drivers::Photo) -> Option<serde_json::Value> {
+    use serde_json::json;
+    let dir = std::path::PathBuf::from(std::env::var_os("HOME")?)
+        .join(".local/share/lhub/devices")
+        .join(model);
+    let file = dir.join("product-photo.png");
+    if !file.exists() {
+        std::fs::create_dir_all(&dir).ok()?;
+        let tmp = file.with_extension("part");
+        let ok = std::process::Command::new("curl")
+            .args(["-fsSL", "--max-time", "30", "-A", "Mozilla/5.0", "-o"])
+            .arg(&tmp)
+            .arg(&photo.url)
+            .status()
+            .is_ok_and(|s| s.success());
+        if !ok {
+            eprintln!("photo: cannot download {}", photo.url);
+            let _ = std::fs::remove_file(&tmp);
+            return None;
+        }
+        std::fs::rename(&tmp, &file).ok()?;
+    }
+    let bytes = std::fs::read(&file).ok()?;
+    let (w, h) = image_size(&bytes)?;
+    let [x, y, cw, ch] = photo.crop;
+    if x + cw > w || y + ch > h {
+        eprintln!(
+            "photo: {} is {w}x{h}, smaller than its crop",
+            file.display()
+        );
+        return None;
+    }
+    let shapes: Vec<_> = photo
+        .leds
+        .iter()
+        .map(|l| json!({ "zone": l.zone, "shape": { "type": "path", "d": l.path } }))
+        .collect();
+    Some(json!({
+        "width": cw,
+        "height": ch,
+        "image": format!("data:image/png;base64,{}", base64(&bytes)),
+        "shapes": shapes,
+        "legends": false,
+        "crop": { "x": x, "y": y, "width": cw, "height": ch },
+        "clip": null,
+        "cutout": photo.cutout,
+    }))
 }
 
 /// Device picture plus LED shapes in its pixel space, from the imported G HUB metadata.

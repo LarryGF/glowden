@@ -38,6 +38,26 @@ pub struct Layout {
     pub picture: Option<String>,
     /// SVG path limiting where light shows on `picture`.
     pub picture_clip: Option<String>,
+    /// A product photo downloaded on first use, with its LED regions.
+    pub photo: Option<Photo>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct Photo {
+    pub url: String,
+    /// x, y, width, height of the device in the downloaded picture.
+    pub crop: [u32; 4],
+    /// "vivid": strongly colored pixels inside LED regions show the live colors.
+    pub cutout: Option<String>,
+    #[serde(default, rename = "led")]
+    pub leds: Vec<LedRegion>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct LedRegion {
+    pub zone: u8,
+    /// SVG path in cropped-photo pixels.
+    pub path: String,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]

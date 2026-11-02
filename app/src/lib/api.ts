@@ -56,6 +56,7 @@ export interface Layout {
   /** Show only this region of the picture (first view of a multi-view lighting picture). */
   crop: { x: number; y: number; width: number; height: number } | null;
   clip: string | null;
+  cutout?: string | null;
   shapes: {
     zone: number;
     shape:

@@ -50,6 +50,26 @@ effect_id = 0x0017
 params = "{r}{g}{b}ff01000014"   # up to 10 bytes; {r}{g}{b} = chosen color
 ```
 
+## Product photos
+
+When G HUB has no usable picture for a device, a definition can point at the manufacturer's
+public product photo instead. lhubd downloads it once into
+`~/.local/share/lhub/devices/<model>/product-photo.png`; it is never shipped with lhub.
+
+```toml
+[layout.photo]
+url = "https://…/top-view.png"
+crop = [x, y, width, height]   # the device inside the picture
+cutout = "vivid"               # lit areas in the photo become openings for live colors
+
+[[layout.photo.led]]
+zone = 1
+path = "M0 850 L517 850 …"     # SVG path in cropped-photo pixels
+```
+
+The LED regions only need to cover their part of the lit area; with `cutout = "vivid"` the
+strongly colored pixels inside them decide what lights up. See `drivers/g502-x-plus.toml`.
+
 ## When data isn't enough
 
 New protocol behaviour (a feature lhub doesn't implement yet) goes in `crates/hidpp/src/devices.rs`

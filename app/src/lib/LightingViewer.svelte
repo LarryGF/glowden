@@ -18,7 +18,7 @@
   let timer: ReturnType<typeof setInterval> | undefined;
 
   // Drawing resources, built once per layout.
-  let photo: HTMLImageElement | null = null;
+  let photo: HTMLCanvasElement | null = null;
   let mask: HTMLCanvasElement | null = null;
   let layer: HTMLCanvasElement | null = null;
   let paths: { zone: number; path: Path2D }[] = [];
@@ -43,9 +43,17 @@
    * holes; the photo's opaque parts are drawn around it. Computed once per layout.
    */
   async function prepare(l: Layout) {
-    photo = new Image();
-    photo.src = l.image;
-    await photo.decode();
+    const img = new Image();
+    img.src = l.image;
+    await img.decode();
+    // The picture as shown: cropped to the device when the layout says so.
+    photo = document.createElement("canvas");
+    photo.width = l.width;
+    photo.height = l.height;
+    const pc = photo.getContext("2d", { willReadFrequently: true })!;
+    if (l.crop) pc.drawImage(img, l.crop.x, l.crop.y, l.crop.width, l.crop.height, 0, 0, l.width, l.height);
+    else pc.drawImage(img, 0, 0, l.width, l.height);
+
     paths = l.shapes.map(({ zone, shape }) => {
       const p = new Path2D();
       if (shape.type === "rect") p.roundRect(shape.rect.x, shape.rect.y, shape.rect.width, shape.rect.height, 10);
@@ -56,11 +64,14 @@
     mask = document.createElement("canvas");
     mask.width = l.width;
     mask.height = l.height;
-    const m = mask.getContext("2d")!;
+    const m = mask.getContext("2d", { willReadFrequently: true })!;
     m.fillStyle = "#fff";
     for (const { path } of paths) m.fill(path);
-    m.globalCompositeOperation = "destination-out";
-    m.drawImage(photo, 0, 0, l.width, l.height);
+    if (l.cutout === "vivid") openVivid(pc, m, l.width, l.height);
+    else {
+      m.globalCompositeOperation = "destination-out";
+      m.drawImage(photo, 0, 0);
+    }
     if (l.clip) {
       m.globalCompositeOperation = "destination-in";
       m.fill(new Path2D(l.clip));
@@ -69,6 +80,34 @@
     layer.width = l.width;
     layer.height = l.height;
     draw();
+  }
+
+  /**
+   * Product photos show their LEDs already lit. Inside the LED regions, strongly colored
+   * pixels become openings: the photo turns grey and transparent there, and the mask keeps
+   * them, so live colors replace the photo's.
+   */
+  function openVivid(pc: CanvasRenderingContext2D, m: CanvasRenderingContext2D, w: number, h: number) {
+    const px = pc.getImageData(0, 0, w, h);
+    const mk = m.getImageData(0, 0, w, h);
+    const d = px.data;
+    const k = mk.data;
+    const ramp = (x: number, lo: number, span: number) => Math.min(1, Math.max(0, (x - lo) / span));
+    for (let i = 0; i < d.length; i += 4) {
+      if (k[i + 3] === 0) continue;
+      const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255, a = d[i + 3] / 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      const sat = max > 0 ? (max - min) / max : 0;
+      const vivid = ramp(sat, 0.25, 0.35) * ramp(max, 0.18, 0.35) * a;
+      if (vivid > 0) {
+        const lum = (0.3 * r + 0.59 * g + 0.11 * b) * 255;
+        d[i] = d[i + 1] = d[i + 2] = lum;
+        d[i + 3] = a * (1 - vivid) * 255;
+      }
+      k[i + 3] = vivid * 255;
+    }
+    pc.putImageData(px, 0, 0);
+    m.putImageData(mk, 0, 0);
   }
 
   /** While painting, show strokes immediately instead of waiting for the device. */
@@ -82,7 +121,7 @@
     const ctx = canvas.getContext("2d")!;
     const lit = live || (freestyle.active && !compact);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(photo, 0, 0, layout.width, layout.height);
+    ctx.drawImage(photo, 0, 0);
 
     const lc = layer.getContext("2d")!;
     lc.globalCompositeOperation = "source-over";
