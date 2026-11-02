@@ -30,6 +30,57 @@ Tested with a G515 LS TKL keyboard, a G502 X PLUS mouse, a Yeti GX microphone an
 headset (detection and battery only so far). Port status against G HUB:
 [`docs/FEATURES.md`](docs/FEATURES.md); current state: [`docs/STATUS.md`](docs/STATUS.md).
 
+## G HUB feature map
+
+What has been ported from G HUB so far. ✅ works, checked on the hardware above ·
+🟡 built, not yet checked on hardware · ⏳ planned · ➖ not applicable on Linux. The full
+inventory with protocol notes is in [`docs/FEATURES.md`](docs/FEATURES.md).
+
+| Area | G HUB feature | GlowDen |
+|---|---|---|
+| **Devices** | Detection (USB, LIGHTSPEED receivers, headset dongle) | ✅ |
+| | Battery level and charging | ✅ keyboard, mouse · 🟡 headset |
+| | Settings kept applied in the background, re-applied on reconnect | ✅ `glowdend` service |
+| | Device pictures with live LED overlay | ✅ from your G HUB files |
+| | Receiver pairing | ⏳ |
+| | Firmware updates | ➖ left to G HUB on purpose |
+| **Lighting** | Fixed, breathing, color cycle | ✅ |
+| | Brightness | ✅ |
+| | Per-key painting (freestyle) | ✅ |
+| | Animated effects | ✅ wave, starlight, pulse · 🟡 audio visualizer |
+| | Screen sampler | 🟡 through the desktop's screen-sharing portal |
+| | LIGHTSYNC (same effect on every device) | ✅ |
+| | Custom effects, saved presets, import/export | 🟡 custom sequences and My presets |
+| | Firmware effects (G515 ripple) | ✅ ripple · ⏳ other firmware effects |
+| | Lights off when the session locks | 🟡 |
+| | Low-battery lighting | 🟡 |
+| | Lights off after inactivity, power-saving effect | ⏳ |
+| | Games controlling the lighting (LED SDK) | ⏳ |
+| **Mouse** | DPI levels, default level, DPI shift | 🟡 |
+| | Report rate | ✅ |
+| | Button assignments (keys, macros, media, programs, sounds) | 🟡 |
+| | Left-handed mode | 🟡 |
+| | Separate X/Y DPI, DPI tester, onboard memory | ⏳ |
+| **Keyboard** | Per-key lighting | ✅ |
+| | Key remapping, G-shift, game mode, onboard profiles | ⏳ |
+| **Headset** | Battery | 🟡 |
+| | Sidetone, equalizer, mic processing, auto sleep, lighting | ⏳ |
+| **Microphone** | Gain, mute, lighting | ✅ |
+| | Blue VO!CE presets and fine-tuning | 🟡 with the engine from your G HUB files |
+| | Voice effects (21 presets) | 🟡 |
+| | Level meter, preset test on a recording | 🟡 |
+| | Automatic gain control | ⏳ |
+| **Profiles** | Per-app profiles with automatic switching | 🟡 KDE Plasma |
+| | Profile import/export, settings backups | 🟡 |
+| | Sound clips on buttons | 🟡 from your G HUB files |
+| | System actions library | 🟡 |
+| | Lua scripting | ⏳ |
+| **App** | Tray with battery and profile switching | 🟡 |
+| | Start on login, low-battery and lock-key notifications | 🟡 |
+| | Home grid/list layout | ✅ |
+| | Languages other than English | ⏳ |
+| | Accounts, community, game library, analytics | ➖ |
+
 ## Install
 
 Download the package for your system from the
