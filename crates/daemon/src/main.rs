@@ -437,6 +437,9 @@ enum Request {
         effect: Option<String>,
     },
     VoiceTestStop,
+    VoiceLevels {
+        id: String,
+    },
     LightingPresets,
     SaveLightingPreset {
         name: String,
@@ -618,6 +621,10 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
             let mut st = lock.lock().unwrap();
             st.voice.play_test(args).map(|_| Value::Null)
         }
+        Request::VoiceLevels { id } => Ok(match lock.lock().unwrap().voice.levels(&id) {
+            Some((input, output)) => json!({ "input": input, "output": output }),
+            None => Value::Null,
+        }),
         Request::VoiceTestStop => {
             lock.lock().unwrap().voice.stop_test();
             Ok(Value::Null)

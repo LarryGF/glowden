@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <pipewire/pipewire.h>
@@ -103,6 +104,10 @@ static struct {
     fifo raw, done;
     int primed;
     unsigned long captured, processed, failed, served;
+    /* Level meter: peaks over the last ~100 ms, written to stdout when it's a pipe. */
+    int meter;
+    float peak_in, peak_out;
+    unsigned meter_blocks;
 } st;
 
 /* st.in (one mono block) → interleaved stereo. */
@@ -146,9 +151,21 @@ static void on_capture(void *data)
     while (st.raw.len >= BLOCK) {
         fifo_pop(&st.raw, st.in, BLOCK);
         float frame[2 * BLOCK];
+        float in_peak = 0;
+        for (int n = 0; n < BLOCK; n++) in_peak = fmaxf(in_peak, fabsf(st.in[n]));
         if (process_block(frame) == 0) {
             fifo_push(&st.done, frame, 2 * BLOCK);
             st.processed++;
+            if (st.meter) {
+                st.peak_in = fmaxf(st.peak_in, in_peak);
+                for (int n = 0; n < 2 * BLOCK; n++) st.peak_out = fmaxf(st.peak_out, fabsf(frame[n]));
+                if (++st.meter_blocks >= RATE / 10 / BLOCK) {
+                    printf("%.1f %.1f\n", 20 * log10f(fmaxf(st.peak_in, 1e-6f)), 20 * log10f(fmaxf(st.peak_out, 1e-6f)));
+                    fflush(stdout);
+                    st.peak_in = st.peak_out = 0;
+                    st.meter_blocks = 0;
+                }
+            }
         } else {
             st.failed++;
         }
@@ -523,6 +540,9 @@ int lhub_voice_main(int argc, char **argv)
     apply_settings(&initial, 1);
     if (process_in) return process_file(process_in, process_out);
 
+    struct stat out_stat;
+    st.meter = fstat(STDOUT_FILENO, &out_stat) == 0 && S_ISFIFO(out_stat.st_mode);
+    signal(SIGPIPE, SIG_IGN);
     pw_init(&argc, &argv);
     st.loop = pw_main_loop_new(NULL);
     signal(SIGINT, stop);

@@ -3,7 +3,7 @@
 
   let {
     device,
-    state,
+    state: voice,
     onstate,
     onerror,
     onplay,
@@ -136,7 +136,7 @@
   let pending: Record<string, number | boolean | string> = {};
   let timer: ReturnType<typeof setTimeout> | undefined;
   function tune(path: string, v: number | boolean | string) {
-    pending = { ...state.effect_overrides, ...pending, [path]: v };
+    pending = { ...voice.effect_overrides, ...pending, [path]: v };
     clearTimeout(timer);
     timer = setTimeout(async () => {
       const send = pending;
@@ -162,12 +162,12 @@
 
 <section>
   <h3>Voice effects</h3>
-  {#if state.effects.length === 0}
+  {#if voice.effects.length === 0}
     <p class="note">Import G HUB's voice effects with <code>lhub import-voice-presets settings.json</code> (or the G HUB folder scan in Settings).</p>
   {:else}
     <div class="effects">
-      {#each state.effects as e (e.name)}
-        <button class="effect" class:active={state.effect === e.name} onclick={() => choose(e.name)}>
+      {#each voice.effects as e (e.name)}
+        <button class="effect" class:active={voice.effect === e.name} onclick={() => choose(e.name)}>
           <span class="name">{e.name}</span>
           {#if e.name !== "Off"}
             <span class="chips">{#each chips(e.settings) as c}<span>{c}</span>{/each}</span>
@@ -176,10 +176,10 @@
       {/each}
     </div>
 
-    {#if state.effect !== "Off" && state.effect_settings}
-      {@const s = state.effect_settings}
+    {#if voice.effect !== "Off" && voice.effect_settings}
+      {@const s = voice.effect_settings}
       <button class="disclose" onclick={() => (advanced = !advanced)} aria-expanded={advanced}>
-        {advanced ? "▾" : "▸"} Adjust {state.effect}{Object.keys(state.effect_overrides).length ? " (tuned)" : ""}
+        {advanced ? "▾" : "▸"} Adjust {voice.effect}{Object.keys(voice.effect_overrides).length ? " (tuned)" : ""}
       </button>
       {#if advanced}
         {#each STAGES as st}
@@ -197,8 +197,8 @@
                 {#if "modes" in c}
                   <label class="slider">
                     <span>{c.label}</span>
-                    <select value={String(v ?? state.effect_modes[c.modes][0])} onchange={(e) => tune(`${st.stage}.${c.field}`, (e.target as HTMLSelectElement).value)}>
-                      {#each state.effect_modes[c.modes] as m}<option value={m}>{modeLabel(m)}</option>{/each}
+                    <select value={String(v ?? voice.effect_modes[c.modes][0])} onchange={(e) => tune(`${st.stage}.${c.field}`, (e.target as HTMLSelectElement).value)}>
+                      {#each voice.effect_modes[c.modes] as m}<option value={m}>{modeLabel(m)}</option>{/each}
                     </select>
                     <em></em>
                   </label>
@@ -216,8 +216,8 @@
           </div>
         {/each}
         <div class="buttons">
-          <button onclick={reset} disabled={!Object.keys(state.effect_overrides).length}>Reset to {state.effect}</button>
-          <button onclick={() => onplay(state.effect)} disabled={!state.has_test}>Play test with {state.effect}</button>
+          <button onclick={reset} disabled={!Object.keys(voice.effect_overrides).length}>Reset to {voice.effect}</button>
+          <button onclick={() => onplay(voice.effect)} disabled={!voice.has_test}>Play test with {voice.effect}</button>
         </div>
       {/if}
     {/if}

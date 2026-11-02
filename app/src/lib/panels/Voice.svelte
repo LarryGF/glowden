@@ -7,13 +7,26 @@
 
   let state = $state<VoiceState | null>(null);
   let busy = $state(false);
+  let levels = $state<{ input: number; output: number } | null>(null);
+  /** dBFS → 0..100 % of a -60..0 dB meter. */
+  const bar = (db: number) => Math.max(0, Math.min(100, ((db + 60) / 60) * 100));
 
   onMount(() => {
     const load = () => api.voiceState(device.id).then((s) => (state = s)).catch(onerror);
     load();
     // Picks up a host that stopped on its own.
     const timer = setInterval(load, 3000);
-    return () => clearInterval(timer);
+    const meter = setInterval(async () => {
+      if (!state?.running) {
+        levels = null;
+        return;
+      }
+      levels = await api.voiceLevels(device.id).catch(() => null);
+    }, 100);
+    return () => {
+      clearInterval(timer);
+      clearInterval(meter);
+    };
   });
 
   async function apply(enabled: boolean, preset: string | null, defaultMic = state?.default_mic ?? true) {
@@ -221,6 +234,13 @@
         <p class="status" class:ok={state.running}>
           {#if state.running}
             Running. Choose <strong>{device.name} (Blue VO!CE)</strong> as the microphone in your apps.
+            {#if levels}
+              <span class="meters">
+                <span class="meter"><span class="m-label">Microphone</span><span class="m-track"><span class="m-fill" style:width="{bar(levels.input)}%"></span></span><em>{levels.input <= -119 ? "silent" : `${Math.round(levels.input)} dB`}</em></span>
+                <span class="meter"><span class="m-label">Processed</span><span class="m-track"><span class="m-fill" style:width="{bar(levels.output)}%"></span></span><em>{levels.output <= -119 ? "silent" : `${Math.round(levels.output)} dB`}</em></span>
+              </span>
+              {#if levels.input <= -119}<span class="m-hint">No sound from the microphone: it may be muted on the mic itself.</span>{/if}
+            {/if}
           {:else}
             Not running{state.error ? `: ${state.error}` : ""}.
           {/if}
@@ -261,7 +281,13 @@
   .switch.small { min-width: 48px; padding: 3px 10px; font-size: 12px; }
   .row-inline { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
   .status { margin: 0; color: var(--warn); }
-  .status.ok { color: var(--accent); }
+  .status.ok { color: var(--accent); display: flex; flex-direction: column; gap: 8px; }
+  .meters { display: flex; flex-direction: column; gap: 6px; color: var(--text-dim); font-size: 12px; }
+  .meter { display: grid; grid-template-columns: 80px 1fr 60px; gap: 10px; align-items: center; }
+  .meter em { font-style: normal; text-align: right; }
+  .m-track { height: 6px; border-radius: 3px; background: var(--bg); overflow: hidden; }
+  .m-fill { display: block; height: 100%; background: var(--accent); transition: width 0.08s linear; }
+  .m-hint { color: var(--warn); font-size: 12px; }
   .note { margin: 0; color: var(--text-faint); font-size: 12px; line-height: 1.5; }
   code { font-size: 11px; }
 </style>

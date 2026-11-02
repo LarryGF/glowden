@@ -602,7 +602,11 @@ pub struct Voice {
     playing: Option<Child>,
     /// Why the last start for a device failed, for the UI.
     errors: HashMap<String, String>,
+    /// Latest (input, output) peak in dBFS from each running host, and when it came.
+    levels: HashMap<String, Levels>,
 }
+
+type Levels = std::sync::Arc<std::sync::Mutex<Option<(f32, f32, std::time::Instant)>>>;
 
 impl Voice {
     /// Runs the virtual microphone with `settings`: live update when it already runs (no
@@ -628,8 +632,22 @@ impl Voice {
     pub fn start(&mut self, id: &str, def: &VoiceDef, args: &[String]) {
         self.stop(id);
         match Self::spawn(def, args) {
-            Ok(child) => {
+            Ok(mut child) => {
                 self.errors.remove(id);
+                let levels = Levels::default();
+                if let Some(out) = child.stdout.take() {
+                    let into = levels.clone();
+                    std::thread::spawn(move || {
+                        use std::io::BufRead;
+                        for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
+                            let mut v = line.split(' ').filter_map(|x| x.parse::<f32>().ok());
+                            if let (Some(i), Some(o)) = (v.next(), v.next()) {
+                                *into.lock().unwrap() = Some((i, o, std::time::Instant::now()));
+                            }
+                        }
+                    });
+                }
+                self.levels.insert(id.to_string(), levels);
                 self.running.insert(id.to_string(), child);
             }
             Err(e) => {
@@ -648,8 +666,9 @@ impl Voice {
             .args(["--target", &source, "--name", "lhub-bluevoice"])
             .args(["--description", &def.description])
             .args(args)
-            // Later settings arrive on stdin, applied without restarting.
+            // Later settings arrive on stdin, applied without restarting; levels come back on stdout.
             .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
             .spawn()
             .map_err(|e| format!("cannot start lhub-voice: {e}"))
     }
@@ -689,6 +708,12 @@ impl Voice {
                 .map_err(|e| format!("cannot start pw-play: {e}"))?,
         );
         Ok(())
+    }
+
+    /// The current input and output peaks (dBFS), while the host reports them.
+    pub fn levels(&self, id: &str) -> Option<(f32, f32)> {
+        let (i, o, at) = (*self.levels.get(id)?.lock().unwrap())?;
+        (at.elapsed().as_millis() < 1000).then_some((i, o))
     }
 
     pub fn stop_test(&mut self) {

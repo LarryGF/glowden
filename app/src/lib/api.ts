@@ -160,6 +160,7 @@ export const api = {
   setVoiceEffectOverrides: (id: string, overrides: Record<string, number | boolean | string>) =>
     request<VoiceState>({ cmd: "set_voice_effect_overrides", id, overrides }),
   voiceTestStop: () => request<void>({ cmd: "voice_test_stop" }),
+  voiceLevels: (id: string) => request<{ input: number; output: number } | null>({ cmd: "voice_levels", id }),
   appSettings: () => request<AppInfo>({ cmd: "app_settings" }),
   profiles: () => request<ProfilesInfo>({ cmd: "profiles" }),
   backups: () => request<string[]>({ cmd: "backups" }),
