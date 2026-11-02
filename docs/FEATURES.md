@@ -33,9 +33,13 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Audio visualizer | built | PipeWire monitor of default output |
 | Screen sampler | planned | Wayland: needs xdg-desktop-portal screencast |
 | LIGHTSYNC: same effect on all devices | done | Sync skips device-specific effects and devices running one |
-| Palettes (vibrant, pastel, mono, signature, custom) | planned | |
+| Palettes (vibrant, pastel, mono, signature, custom) | done | Own palettes plus saved custom colors in the color picker |
 | Custom effect editor, save/import/export | planned | |
 | Turn off lighting after inactivity | next | RGB `0x8071` fn 7 power settings seen in captures |
+| Lighting off while the PC sleeps / locks | planned | App setting `lighting_sleep`, `/lighting/sleep` |
+| Low-battery and power-saving lighting effects | planned | Device settings `LOW_BATTERY_EFFECT`, `POWER_SAVING_EFFECT` |
+| Saved custom effects and presets (save, delete, import, export) | planned | `/lighting/effect/presets/*`, `/lighting/effect/import|export` |
+| Games driving lighting (LED SDK) | planned | `integration_manager_settings.allowLedSdk`; Proton games would need a bridge DLL |
 | Mouse zone layout | built | Product photo with 8 strip regions; zone order not yet checked on the mouse |
 | LampArray (Windows Dynamic Lighting) | n/a | Windows-only |
 
@@ -45,6 +49,10 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 |---|---|---|
 | DPI levels, default, shift | built | `0x2201` levels + active level in service and UI; shift = lowest level while held |
 | Report rate | done | `0x8060` read/write verified |
+| Default DPI level, DPI shift target, "go to shift" assignment | planned | `/mouse/dpi_default`, `/mouse/dpi_go_to_shift` |
+| Advanced DPI (separate X/Y), DPI correction | planned | `DPI_ADVANCED`, `DPI_CORRECTION` |
+| DPI tester tool | planned | G HUB ships `dpi-tester.min.js` |
+| Left-handed (swap buttons) | planned | App setting `mouse_buttons_swapped` |
 | DPI cycle up/down via mouse buttons | built | Button spy `0x8110`, masks in the driver file; not yet pressed on the mouse |
 | Hi-res wheel / wheel mode | next | `0x2121` |
 | Button assignments | planned | Onboard profiles `0x8100` |
@@ -56,6 +64,7 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 |---|---|---|
 | Key assignments, G-shift | planned | `0x1b05` full key customization |
 | Game mode (disable Win key etc.) | next | `0x4523` |
+| Fn-layer and G-shift-layer key customization (remap, macros, samples, system actions; press/hold/toggle/loop playback) | planned | G HUB "FKC" |
 | Onboard profiles | planned | `0x8101` |
 | Per-key lighting | built | |
 
@@ -80,6 +89,8 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | VO!CE presets → engine parameters | next | |
 | VO!CE as a PipeWire virtual mic | next | |
 | Smart lock | planned | G HUB byte `0xae` vs ours `0xca` unresolved |
+| Blue VO!CE automatic gain control, reference gain | next | Part of every VO!CE preset |
+| Voice effects (21 presets: delay, flanger/phaser, reverb, ring modulation, pitch/formant voice changer) | planned | `AUDIO_EFFECTS_SETTINGS` cards for `yeti-gx`; engine is the DTS Studio APO in `driver_audio_apo` |
 
 ## Profiles, assignments, macros
 
@@ -90,6 +101,9 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Macros (record, edit, assign) | planned | Host macros need `/dev/uinput` access |
 | Lua scripting | planned | |
 | Import/export profiles | planned | |
+| Sound samples (play audio clips from a key or button) | planned | `audio_samples` depot, `Generic_Sample_*`, `Expression_Sample_*` |
+| System actions library (open apps, shortcuts, media) | planned | Built-in `MACRO_PLAYBACK` cards |
+| Settings backup and restore | planned | `/local_settings_backup/*` |
 
 ## Not applicable
 
@@ -114,3 +128,14 @@ Imported at runtime with `lhub import-ghub <G HUB depots dir>` into `~/.local/sh
 G515, G522 and Yeti GX pictures and LED geometry work (live viewer overlay). The G502 X PLUS
 device pictures in its package are encrypted (G HUB fetches the key online); they are skipped,
 and the mouse shows its unencrypted product card plus a zone strip.
+
+## App settings
+
+| G HUB setting | Status | Notes |
+|---|---|---|
+| Start on login | built | systemd user unit for the service (`packaging/systemd`) |
+| Notifications: general, low battery, Caps/Num lock | planned | `notifications_enabled`, `low_battery_notifications_enabled`, `lock_notifications_enabled` |
+| Language | planned | UI is English only |
+| Home layout (grid/list) | planned | `home_layout` |
+| Tray icon with device list, DPI and battery | planned | `/system_tray/*` |
+| Analytics, accounts, device recommendations | n/a | |
