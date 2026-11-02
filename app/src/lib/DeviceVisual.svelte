@@ -18,9 +18,10 @@
 {#if src}
   <img {src} alt={device.name} style:width="{size}px" style:height="{size}px" />
 {:else}
-  <DeviceIcon kind={device.kind} {size} />
+  <!-- The drawn icon stays icon-sized where a photo would fill the card. -->
+  <DeviceIcon kind={device.kind} size={Math.min(size, 180)} />
 {/if}
 
 <style>
-  img { object-fit: contain; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.45)); }
+  img { max-width: 100%; object-fit: contain; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.45)); }
 </style>

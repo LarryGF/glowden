@@ -4,7 +4,7 @@
   let { kind, size = 96 }: { kind: Kind; size?: number } = $props();
 </script>
 
-<svg width={size} height={size} viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+<svg width={size} height={size} style="max-width: 100%; height: auto" viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
   {#if kind === "microphone"}
     <rect x="34" y="10" width="28" height="46" rx="14" />
     <path d="M26 44a22 22 0 0 0 44 0" />

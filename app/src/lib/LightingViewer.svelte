@@ -216,7 +216,7 @@
 </div>
 
 <style>
-  .stage { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
+  .stage { width: 100%; max-width: 100%; min-width: 0; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
   canvas { width: 100%; height: 100%; max-height: 74vh; object-fit: contain; display: block; filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.6)); }
   .painting canvas { cursor: crosshair; }
   /* Devices without a picture: animate the zone dots only. */
@@ -224,11 +224,13 @@
   .cycle .dot { animation: hue 6s linear infinite; }
   @keyframes breathe { 50% { opacity: 0.2; } }
   @keyframes hue { to { filter: hue-rotate(360deg); } }
-  .plain { display: grid; place-items: center; color: var(--text-dim); }
-  .strip { display: flex; gap: 12px; justify-content: center; }
+  .plain { display: grid; place-items: center; color: var(--text-dim); max-width: 100%; }
+  /* Without a picture the zones are dots; keyboards have dozens, so they wrap. */
+  .strip { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; max-width: min(100%, 720px); }
   .dot { width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 1px solid var(--line); }
   .painting .dot { cursor: crosshair; }
   .compact { gap: 12px; }
   .compact canvas { max-height: 300px; filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.5)); }
-  .compact .dot { width: 14px; height: 14px; pointer-events: none; }
+  .compact .strip { gap: 8px; max-width: 100%; }
+  .compact .dot { width: 12px; height: 12px; pointer-events: none; }
 </style>
