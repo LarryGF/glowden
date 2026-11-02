@@ -1,11 +1,11 @@
 [Desktop Entry]
 Type=Application
-Name=LHUB
+Name=GlowDen
 GenericName=Peripheral settings
 Comment=Lighting, buttons, DPI and microphone settings for Logitech G devices
-Exec=lhub-app
-Icon=lhub
+Exec=glowden
+Icon=glowden
 Terminal=false
 Categories=Settings;HardwareSettings;
 Keywords=logitech;keyboard;mouse;headset;microphone;rgb;lighting;dpi;
-StartupWMClass=lhub-app
+StartupWMClass=glowden

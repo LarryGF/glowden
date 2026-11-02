@@ -1,5 +1,5 @@
 [package]
-name = "lhubd"
+name = "glowdend"
 edition.workspace = true
 version.workspace = true
 license.workspace = true

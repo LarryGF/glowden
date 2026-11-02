@@ -1104,6 +1104,51 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
+name = "glowden"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tauri",
+ "tauri-build",
+]
+
+[[package]]
+name = "glowden-cli"
+version = "0.1.0"
+dependencies = [
+ "hidpp",
+ "lighting",
+ "serde_json",
+]
+
+[[package]]
+name = "glowden-sampler"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "glowden-voice"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "glowdend"
+version = "0.1.0"
+dependencies = [
+ "dbus",
+ "hidpp",
+ "libc",
+ "lighting",
+ "serde",
+ "serde_json",
+ "toml 1.1.8+spec-1.1.0",
+]
+
+[[package]]
 name = "gobject-sys"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1645,51 +1690,6 @@ checksum = "0fbe853b403ae61a04233030ae8a79d94975281ed9770a1f9e246732b534b28d"
 dependencies = [
  "bitflags 2.13.2",
  "serde",
-]
-
-[[package]]
-name = "lhub-app"
-version = "0.1.0"
-dependencies = [
- "serde_json",
- "tauri",
- "tauri-build",
-]
-
-[[package]]
-name = "lhub-cli"
-version = "0.1.0"
-dependencies = [
- "hidpp",
- "lighting",
- "serde_json",
-]
-
-[[package]]
-name = "lhub-sampler"
-version = "0.1.0"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "lhub-voice"
-version = "0.1.0"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "lhubd"
-version = "0.1.0"
-dependencies = [
- "dbus",
- "hidpp",
- "libc",
- "lighting",
- "serde",
- "serde_json",
- "toml 1.1.8+spec-1.1.0",
 ]
 
 [[package]]

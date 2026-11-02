@@ -495,7 +495,8 @@ fn host_effect(l: &Lighting) -> Result<Box<dyn Effect>, String> {
             })
         }
         Lighting::Screen { speed, boost } => {
-            let mut s = Screen::new().map_err(|e| format!("screen capture (lhub-sampler): {e}"))?;
+            let mut s =
+                Screen::new().map_err(|e| format!("screen capture (glowden-sampler): {e}"))?;
             s.follow = lerp(*speed, 0.05, 0.9);
             s.saturation = *boost as f32 / 50.0;
             Box::new(s)

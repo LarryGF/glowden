@@ -25,7 +25,7 @@ fn main() {
             build.define(k, v);
         }
     }
-    build.compile("lhubvoice");
+    build.compile("glowdenvoice");
     println!("cargo:rustc-link-lib=m");
     for f in [
         "loader/pe.c",

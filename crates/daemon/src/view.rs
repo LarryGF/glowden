@@ -170,7 +170,7 @@ pub fn build(f: &mut Found, driver: Option<&crate::drivers::Driver>) -> DeviceVi
 /// variants preferred.
 pub fn image(model: &str) -> Option<String> {
     let dir = std::path::PathBuf::from(std::env::var_os("HOME")?)
-        .join(".local/share/lhub/devices")
+        .join(".local/share/glowden/devices")
         .join(model);
     // Product views only; splash screens and promo cards are marketing art, not the device.
     const PREFERRED: [&str; 6] = [
@@ -238,7 +238,7 @@ fn image_size(bytes: &[u8]) -> Option<(u32, u32)> {
 pub fn photo_layout(model: &str, photo: &crate::drivers::Photo) -> Option<serde_json::Value> {
     use serde_json::json;
     let dir = std::path::PathBuf::from(std::env::var_os("HOME")?)
-        .join(".local/share/lhub/devices")
+        .join(".local/share/glowden/devices")
         .join(model);
     let file = dir.join("product-photo.png");
     let source = dir.join("product-photo.url");
@@ -299,7 +299,7 @@ pub fn layout(
 ) -> Option<serde_json::Value> {
     use serde_json::{Value, json};
     let dir = std::path::PathBuf::from(std::env::var_os("HOME")?)
-        .join(".local/share/lhub/devices")
+        .join(".local/share/glowden/devices")
         .join(model);
     let meta: Value =
         serde_json::from_slice(&std::fs::read(dir.join("metadata.json")).ok()?).ok()?;

@@ -83,7 +83,7 @@ export interface Device {
   firmware_effects: { id: string; label: string }[];
 }
 
-/** Mirrors lhubd's config: speeds, sizes and levels are 1..100 sliders. `glow` scales the
+/** Mirrors glowdend's config: speeds, sizes and levels are 1..100 sliders. `glow` scales the
  * effect layer and `backdrop` the background of overlay effects. */
 export type Lighting =
   | { effect: "fixed"; color: string }

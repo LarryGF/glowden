@@ -1,11 +1,11 @@
 [package]
-name = "lhub-cli"
+name = "glowden-cli"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "lhub"
+name = "glowdenctl"
 path = "src/main.rs"
 
 [dependencies]

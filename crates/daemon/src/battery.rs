@@ -40,7 +40,7 @@ fn lighting_power(xml: &str, effect: &str, brightness: u8) -> Option<f32> {
 pub fn hours_left(model: &str, percent: u8, cfg: &DeviceConfig) -> Option<f32> {
     let home = std::env::var_os("HOME")?;
     let path = std::path::Path::new(&home)
-        .join(".local/share/lhub/devices")
+        .join(".local/share/glowden/devices")
         .join(model)
         .join("battery.xml");
     let xml = std::fs::read_to_string(path).ok()?;

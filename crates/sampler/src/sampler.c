@@ -3,7 +3,7 @@
  * PipeWire and writes the average color of each cell of a grid to stdout, about 30 times a
  * second, as COLS*ROWS RGB byte triples, row by row from the top left.
  *
- *   lhub-sampler [--grid COLSxROWS] [--token FILE]
+ *   glowden-sampler [--grid COLSxROWS] [--token FILE]
  *
  * FILE keeps the portal's restore token between runs. Quits when stdout closes or the
  * process that started it goes away.
@@ -58,7 +58,7 @@ typedef int (*filler)(sd_bus_message *m, void *data);
 static int portal_request(const char *method, filler fill, void *data, reply *r)
 {
     char token[32], path[256];
-    snprintf(token, sizeof token, "lhub%d", ++counter);
+    snprintf(token, sizeof token, "glowden%d", ++counter);
     snprintf(path, sizeof path, PORTAL_PATH "/request/%s/%s", sender, token);
     sd_bus_slot *slot = NULL;
     memset(r, 0, sizeof *r);
@@ -74,7 +74,7 @@ static int portal_request(const char *method, filler fill, void *data, reply *r)
     if (e >= 0) e = sd_bus_call(bus, m, 0, &err, NULL);
     sd_bus_message_unref(m);
     if (e < 0) {
-        fprintf(stderr, "lhub-sampler: %s: %s\n", method, err.message ? err.message : strerror(-e));
+        fprintf(stderr, "glowden-sampler: %s: %s\n", method, err.message ? err.message : strerror(-e));
         sd_bus_error_free(&err);
         sd_bus_slot_unref(slot);
         return e;
@@ -87,7 +87,7 @@ static int portal_request(const char *method, filler fill, void *data, reply *r)
     sd_bus_slot_unref(slot);
     if (!r->done) return -EIO;
     if (r->response != 0) {
-        fprintf(stderr, "lhub-sampler: %s was %s\n", method, r->response == 1 ? "cancelled" : "refused");
+        fprintf(stderr, "glowden-sampler: %s was %s\n", method, r->response == 1 ? "cancelled" : "refused");
         return -ECANCELED;
     }
     return 0;
@@ -115,7 +115,7 @@ static char session[256];
 static int fill_create(sd_bus_message *m, void *data)
 {
     int e = sd_bus_message_open_container(m, 'a', "{sv}");
-    if (e >= 0) e = sd_bus_message_append(m, "{sv}", "session_handle_token", "s", "lhubsampler");
+    if (e >= 0) e = sd_bus_message_append(m, "{sv}", "session_handle_token", "s", "glowdensampler");
     return e;
 }
 
@@ -143,7 +143,7 @@ static int fill_start(sd_bus_message *m, void *data)
 static int open_screencast(uint32_t *node)
 {
     if (sd_bus_open_user(&bus) < 0) {
-        fprintf(stderr, "lhub-sampler: no session bus\n");
+        fprintf(stderr, "glowden-sampler: no session bus\n");
         return -1;
     }
     const char *unique;
@@ -157,7 +157,7 @@ static int open_screencast(uint32_t *node)
     const char *handle = NULL;
     if (find_result(r.results, "session_handle", "s") >= 0) sd_bus_message_read(r.results, "s", &handle);
     if (!handle) {
-        fprintf(stderr, "lhub-sampler: the portal gave no session\n");
+        fprintf(stderr, "glowden-sampler: the portal gave no session\n");
         return -1;
     }
     snprintf(session, sizeof session, "%s", handle);
@@ -186,7 +186,7 @@ static int open_screencast(uint32_t *node)
         sd_bus_message_read(r.results, "u", node);
     sd_bus_message_unref(r.results);
     if (!*node) {
-        fprintf(stderr, "lhub-sampler: the portal gave no stream\n");
+        fprintf(stderr, "glowden-sampler: the portal gave no stream\n");
         return -1;
     }
 
@@ -198,7 +198,7 @@ static int open_screencast(uint32_t *node)
     sd_bus_message_unref(m);
     int fd = -1;
     if (e >= 0 && sd_bus_message_read(answer, "h", &fd) >= 0) fd = fcntl(fd, F_DUPFD_CLOEXEC, 3);
-    else fprintf(stderr, "lhub-sampler: OpenPipeWireRemote: %s\n", err.message ? err.message : strerror(-e));
+    else fprintf(stderr, "glowden-sampler: OpenPipeWireRemote: %s\n", err.message ? err.message : strerror(-e));
     sd_bus_error_free(&err);
     sd_bus_message_unref(answer);
     return fd;
@@ -220,7 +220,7 @@ static void on_param_changed(void *data, uint32_t id, const struct spa_pod *para
     if (id != SPA_PARAM_Format || !param) return;
     if (spa_format_video_raw_parse(param, &st.format) < 0) return;
     st.have_format = 1;
-    fprintf(stderr, "lhub-sampler: %ux%u\n", st.format.size.width, st.format.size.height);
+    fprintf(stderr, "glowden-sampler: %ux%u\n", st.format.size.width, st.format.size.height);
     /* Plain memory buffers, which this process can read directly. */
     uint8_t buf[256];
     struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buf, sizeof buf);
@@ -279,18 +279,18 @@ static void stop(int sig)
     pw_main_loop_quit(st.loop);
 }
 
-int lhub_sampler_main(int argc, char **argv)
+int glowden_sampler_main(int argc, char **argv)
 {
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--grid") && i + 1 < argc) {
             if (sscanf(argv[++i], "%dx%d", &cols, &rows) != 2 || cols < 1 || rows < 1 || cols > 64 || rows > 64) {
-                fprintf(stderr, "lhub-sampler: bad grid %s\n", argv[i]);
+                fprintf(stderr, "glowden-sampler: bad grid %s\n", argv[i]);
                 return 2;
             }
         } else if (!strcmp(argv[i], "--token") && i + 1 < argc) {
             token_file = argv[++i];
         } else {
-            fprintf(stderr, "usage: lhub-sampler [--grid COLSxROWS] [--token FILE]\n");
+            fprintf(stderr, "usage: glowden-sampler [--grid COLSxROWS] [--token FILE]\n");
             return 2;
         }
     }
@@ -307,10 +307,10 @@ int lhub_sampler_main(int argc, char **argv)
     struct pw_context *context = pw_context_new(pw_main_loop_get_loop(st.loop), NULL, 0);
     struct pw_core *core = pw_context_connect_fd(context, fd, NULL, 0);
     if (!core) {
-        fprintf(stderr, "lhub-sampler: cannot connect to the screen stream\n");
+        fprintf(stderr, "glowden-sampler: cannot connect to the screen stream\n");
         return 1;
     }
-    st.stream = pw_stream_new(core, "lhub-sampler",
+    st.stream = pw_stream_new(core, "glowden-sampler",
                               pw_properties_new(PW_KEY_MEDIA_TYPE, "Video", PW_KEY_MEDIA_CATEGORY, "Capture",
                                                 PW_KEY_MEDIA_ROLE, "Screen", NULL));
     pw_stream_add_listener(st.stream, &st.listener, &stream_events, NULL);

@@ -5,14 +5,14 @@ Last updated 2026-11-02. Feature-by-feature port status lives in `FEATURES.md`.
 ## Running it
 
 ```sh
-target/release/lhub-app          # UI; starts the service if it isn't running (and restarts it if it dies)
-target/release/lhubd             # service on its own (log: ~/.local/state/lhub/lhubd.log)
-target/release/lhub list         # CLI: devices and features (LHUB_DEBUG=1 prints every frame)
+target/release/glowden          # UI; starts the service if it isn't running (and restarts it if it dies)
+target/release/glowdend             # service on its own (log: ~/.local/state/glowden/glowdend.log)
+target/release/glowdenctl list         # CLI: devices and features (GLOWDEN_DEBUG=1 prints every frame)
 ```
 
-Device access comes from `packaging/udev/70-lhub.rules` (installed on this machine).
+Device access comes from `packaging/udev/70-glowden.rules` (installed on this machine).
 `packaging/arch/PKGBUILD` (built with `makepkg`) and `packaging/deb/build.sh` (Ubuntu 22.04
-container → `dist/lhub_<version>_amd64.deb`) install the app, the CLI, the service, the
+container → `dist/glowden_<version>_amd64.deb`) install the app, the CLI, the service, the
 helpers, the rule, a systemd user unit and a desktop entry. The .deb was test-installed in
 clean Ubuntu 22.04 and Debian 12 containers (dependencies resolve, binaries start); the GUI
 from the packages hasn't been opened yet.
@@ -23,12 +23,12 @@ from the packages hasn't been opened yet.
 |---|---|
 | `crates/hidpp` | HID++ 2.0 over hidraw, centurion headset transport, decoded device features |
 | `crates/lighting` | Key layout, per-key streaming engine, host effects, audio analyzer, key input |
-| `crates/daemon` | `lhubd`: device workers, persistent config, socket API |
-| `crates/cli` | `lhub` command-line tool and experiments |
-| `crates/voice` | `lhub-voice`: PE loader + PipeWire host running the user's DTS ClearVoice 2 DLL (VO!CE and the voice effect stages), level meter on stdout |
-| `crates/sampler` | `lhub-sampler`: ScreenCast portal + PipeWire video → color grid for the screen sampler effect |
+| `crates/daemon` | `glowdend`: device workers, persistent config, socket API |
+| `crates/cli` | `glowden` command-line tool and experiments |
+| `crates/voice` | `glowden-voice`: PE loader + PipeWire host running the user's DTS ClearVoice 2 DLL (VO!CE and the voice effect stages), level meter on stdout |
+| `crates/sampler` | `glowden-sampler`: ScreenCast portal + PipeWire video → color grid for the screen sampler effect |
 | `tools/voice-probes` | Offline VO!CE engine experiments |
-| `app` | Tauri + Svelte UI, a client of `lhubd` |
+| `app` | Tauri + Svelte UI, a client of `glowdend` |
 | `packaging` | udev rule, systemd unit, Arch package |
 
 ## Verified on your hardware
@@ -49,13 +49,13 @@ from the packages hasn't been opened yet.
 
 ## Known issues
 
-- An app build from before the zombie-reaping fix leaves a `<defunct>` lhubd entry until
+- An app build from before the zombie-reaping fix leaves a `<defunct>` glowdend entry until
   that app window closes. Harmless.
 - The G522 drops out of the device list while the headset is off; it should appear as
   "off" instead.
 
 ## Device pictures
 
-Keyboard, mic and headset pictures come from the user's G HUB depots (`lhub import-ghub`);
+Keyboard, mic and headset pictures come from the user's G HUB depots (`glowdenctl import-ghub`);
 the G502 X PLUS ones are encrypted, so it uses Logitech's public product photo, downloaded on
 first use. Neither is copied into this repo. See `adding-devices.md`.

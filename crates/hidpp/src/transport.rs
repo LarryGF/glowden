@@ -495,7 +495,7 @@ impl DeviceInfo {
 
 fn debug() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var_os("LHUB_DEBUG").is_some())
+    *ON.get_or_init(|| std::env::var_os("GLOWDEN_DEBUG").is_some())
 }
 
 fn hex(b: &[u8]) -> String {

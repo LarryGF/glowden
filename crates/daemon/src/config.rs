@@ -174,7 +174,7 @@ pub enum Action {
         command: String,
     },
     /// A sound file played on press (G HUB's sound clips are imported into
-    /// ~/.local/share/lhub/sounds).
+    /// ~/.local/share/glowden/sounds).
     Sound {
         file: String,
     },
@@ -307,7 +307,7 @@ impl Config {
     }
 }
 
-/// Settings of lhub itself (the app's Settings page).
+/// Settings of glowden itself (the app's Settings page).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AppSettings {
     /// Folders with G HUB data (depots, settings.db) to import pictures, the VO!CE engine
@@ -353,7 +353,7 @@ pub fn path() -> PathBuf {
         .unwrap_or_else(|| {
             PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".config")
         });
-    base.join("lhub/config.json")
+    base.join("glowden/config.json")
 }
 
 impl Config {

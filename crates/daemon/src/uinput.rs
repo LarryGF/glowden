@@ -48,7 +48,7 @@ impl VirtualInput {
         };
         ioctl(UI_SET_EVBIT, EV_KEY as _)?;
         ioctl(UI_SET_EVBIT, EV_REL as _)?;
-        // Every keyboard key and mouse button lhub can name.
+        // Every keyboard key and mouse button glowden can name.
         for code in 1..0x2ff {
             ioctl(UI_SET_KEYBIT, code)?;
         }
@@ -63,7 +63,7 @@ impl VirtualInput {
             name: [0; 80],
             ff_effects_max: 0,
         };
-        let name = b"lhub virtual input";
+        let name = b"glowden virtual input";
         setup.name[..name.len()].copy_from_slice(name);
         if unsafe { libc::ioctl(fd, UI_DEV_SETUP, &setup as *const Setup) } < 0 {
             return Err(std::io::Error::last_os_error());

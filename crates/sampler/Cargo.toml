@@ -1,5 +1,5 @@
 [package]
-name = "lhub-sampler"
+name = "glowden-sampler"
 edition.workspace = true
 version.workspace = true
 license.workspace = true

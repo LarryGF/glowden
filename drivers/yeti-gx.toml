@@ -4,7 +4,7 @@ products = [0x0afc]
 ghub_model = "yeti_gx"
 
 
-# Blue VO!CE runs on the host: lhub-voice processes this PipeWire source and offers the
+# Blue VO!CE runs on the host: glowden-voice processes this PipeWire source and offers the
 # result as a separate microphone.
 [voice]
 source = "Logitech_Yeti_GX"

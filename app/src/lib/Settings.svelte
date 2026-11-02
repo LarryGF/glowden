@@ -151,8 +151,8 @@
           {/each}
         </ul>
         <p class="note">
-          Definitions are read from <code>/usr/share/lhub/drivers</code>, the repo's
-          <code>drivers/</code> and <code>~/.local/share/lhub/drivers</code> (yours win). Restart the
+          Definitions are read from <code>/usr/share/glowden/drivers</code>, the repo's
+          <code>drivers/</code> and <code>~/.local/share/glowden/drivers</code> (yours win). Restart the
           service after editing one.
         </p>
       </details>
@@ -160,7 +160,7 @@
 
     <section class="card">
       <h2>Backups</h2>
-      <p class="note">A backup is a copy of all LHUB settings: devices, profiles and these app settings.</p>
+      <p class="note">A backup is a copy of all GlowDen settings: devices, profiles and these app settings.</p>
       <ul class="paths">
         {#each backups as b}
           <li>
@@ -178,7 +178,7 @@
     <section class="card">
       <h2>App</h2>
       <label class="row">
-        <span>Start the LHUB service when you log in</span>
+        <span>Start the GlowDen service when you log in</span>
         <button class="switch" class:on={info.autostart} onclick={() => autostart(!info!.autostart)}>{info.autostart ? "On" : "Off"}</button>
       </label>
       <label class="row">

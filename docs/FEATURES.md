@@ -13,7 +13,7 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Stable identity across replug | done | USB port + product id |
 | Battery status (`unified battery`) | done | Keyboard, mouse |
 | Headset battery (centurion `0x0104`) | built | Percent and charging flag; charging flag not yet confirmed on the G522 |
-| Background agent that keeps settings applied | done | `lhubd`, systemd user unit |
+| Background agent that keeps settings applied | done | `glowdend`, systemd user unit |
 | Settings re-applied on reconnect/wake | built | Rescan every 3 s |
 | Multiple devices of the same model | built | Ids are per USB port |
 | Device pictures | done | G HUB pictures imported at runtime; G502 X PLUS from the public product photo |
@@ -31,7 +31,7 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Firmware reactive ripple (G515 `0x0017`) | done | Verified by user |
 | Other firmware all-zones effects (G515 `0x000c 0x0013 0x0016 0x0018 0x0019`, G502 `0x0004 0x000c 0x000f 0x0010 0x0013`) | next | Parameters partly seen in captures |
 | Audio visualizer | built | PipeWire monitor of default output |
-| Screen sampler | built | `lhub-sampler`: ScreenCast portal (restore token, asks once) → PipeWire video → 16×9 color grid; each key shows the screen at its place. One capture shared by all devices. Not yet tried on the desktop |
+| Screen sampler | built | `glowden-sampler`: ScreenCast portal (restore token, asks once) → PipeWire video → 16×9 color grid; each key shows the screen at its place. One capture shared by all devices. Not yet tried on the desktop |
 | LIGHTSYNC: same effect on all devices | done | Sync skips device-specific effects and devices running one |
 | Palettes (vibrant, pastel, mono, signature, custom) | done | Own palettes plus saved custom colors in the color picker |
 | Custom effect editor, save/import/export | built | "Custom sequence": color steps with durations, blend, sweep across the board; saved/exported through My presets. Not G HUB's per-key keyframe timeline |
@@ -87,12 +87,12 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 |---|---|---|
 | Gain, mute | done | Mute state read back from the mic |
 | Lighting | done | |
-| Blue VO!CE 2 engine | built | Real DTS ClearVoice 2 DLL via our PE loader, as a PipeWire virtual mic (`lhub-voice`) |
+| Blue VO!CE 2 engine | built | Real DTS ClearVoice 2 DLL via our PE loader, as a PipeWire virtual mic (`glowden-voice`) |
 | VO!CE presets → engine parameters | done | Every preset field measured (docs/voice.md); the 8 G HUB presets load |
 | VO!CE as a PipeWire virtual mic | built | "Yeti GX (Blue VO!CE)"; preset picker in the app; not yet heard by the user |
 | Smart lock | built | G HUB's exact bytes sent with VO!CE changes (`00 05 07 00 ae 00 00 02`) |
 | Blue VO!CE automatic gain control, reference gain | partly | Gain on enable and smart-lock bytes as G HUB sends them; AGC itself unidentified |
-| Mic level meter | built | Raw and processed peaks from `lhub-voice` (stdout, every 100 ms) in the VO!CE panel; flags a silent (muted) mic |
+| Mic level meter | built | Raw and processed peaks from `glowden-voice` (stdout, every 100 ms) in the VO!CE panel; flags a silent (muted) mic |
 | Blue VO!CE advanced controls | built | Per-stage switches and sliders on top of a preset, applied live |
 | Voice effects (21 presets: delay, flanger/phaser, reverb, ring modulation, pitch/formant voice changer) | built | The DTS effect stages in the ClearVoice 2 DLL, after VO!CE on the virtual mic (also without VO!CE); presets, every G HUB control, preview on the test recording (docs/voice.md). Not yet heard by the user |
 
@@ -100,7 +100,7 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 
 | G HUB feature | Status | Notes |
 |---|---|---|
-| Profiles per application, auto switching | built | KWin script reports focus over D-Bus (`dev.lhub.Focus`); profiles override lighting, brightness, DPI, report rate, assignments |
+| Profiles per application, auto switching | built | KWin script reports focus over D-Bus (`dev.glowden.Focus`); profiles override lighting, brightness, DPI, report rate, assignments |
 | Persistent features (settings shared across profiles) | built | Anything a profile doesn't set comes from the default profile; VO!CE is global |
 | Macros (record, edit, assign) | built | Key/shortcut steps with pauses on mouse buttons; keyboard keys still planned |
 | Lua scripting | planned | |
@@ -128,7 +128,7 @@ G HUB accounts/community/marketplace, game library (`gl`), Windows audio mixing 
 
 ## Device pictures
 
-Imported at runtime with `lhub import-ghub <G HUB depots dir>` into `~/.local/share/lhub/devices/`.
+Imported at runtime with `glowdenctl import-ghub <G HUB depots dir>` into `~/.local/share/glowden/devices/`.
 G515, G522 and Yeti GX pictures and LED geometry work (live viewer overlay). The G502 X PLUS
 device pictures in its package are encrypted (G HUB fetches the key online); they are skipped,
 and the mouse shows its unencrypted product card plus a zone strip.
@@ -143,8 +143,8 @@ and the mouse shows its unencrypted product card plus a zone strip.
 | Notifications: general | planned | `notifications_enabled`, `low_battery_notifications_enabled`, `lock_notifications_enabled` |
 | Language | planned | UI is English only |
 | Home layout (grid/list) | built | Toggle on the home page, kept per viewer |
-| Tray icon with device list and battery | built | Battery per device, profile switching, open/quit; closing the window keeps lhub in the tray |
+| Tray icon with device list and battery | built | Battery per device, profile switching, open/quit; closing the window keeps glowden in the tray |
 | Analytics, accounts, device recommendations | n/a | |
 | G HUB data folders: scan and import | built | Settings page: pictures, LED layouts, VO!CE engine and presets (reads settings.db) |
-| Add a device (starter definition) | built | Settings page writes `~/.local/share/lhub/drivers/<device>.toml` |
-| VO!CE preset test (record, compare presets on one take) | built | `lhub-voice --process` runs presets offline on the recording |
+| Add a device (starter definition) | built | Settings page writes `~/.local/share/glowden/drivers/<device>.toml` |
+| VO!CE preset test (record, compare presets on one take) | built | `glowden-voice --process` runs presets offline on the recording |

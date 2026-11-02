@@ -128,7 +128,7 @@
         <button onclick={create}>Create profile</button>
       </div>
       <div class="row">
-        <input placeholder="/path/to/lhub-profile-….json" bind:value={importPath} />
+        <input placeholder="/path/to/glowden-profile-….json" bind:value={importPath} />
         <button onclick={() => importPath.trim() && run(api.importProfile(importPath.trim()))}>Import</button>
       </div>
       {#if message}<p class="note">{message}</p>{/if}

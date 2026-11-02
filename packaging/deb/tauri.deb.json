@@ -9,7 +9,7 @@
     ],
     "category": "Utility",
     "shortDescription": "Open device hub for Logitech G peripherals",
-    "longDescription": "LHUB configures Logitech G keyboards, mice, headsets and microphones on Linux: lighting, buttons, DPI and microphone settings, kept applied by a background service. Not affiliated with Logitech.",
+    "longDescription": "GlowDen configures Logitech G keyboards, mice, headsets and microphones on Linux: lighting, buttons, DPI and microphone settings, kept applied by a background service. Not affiliated with Logitech.",
     "license": "MIT OR Apache-2.0",
     "linux": {
       "deb": {
@@ -28,25 +28,25 @@
           "libayatana-appindicator3-1",
           "xdg-desktop-portal"
         ],
-        "desktopTemplate": "../../packaging/linux/lhub.desktop",
+        "desktopTemplate": "../../packaging/linux/glowden.desktop",
         "postInstallScript": "../../packaging/deb/postinst",
         "postRemoveScript": "../../packaging/deb/postrm",
         "files": {
-          "/usr/bin/lhubd": "../../target/release/lhubd",
-          "/usr/bin/lhub": "../../target/release/lhub",
-          "/usr/bin/lhub-voice": "../../target/release/lhub-voice",
-          "/usr/bin/lhub-sampler": "../../target/release/lhub-sampler",
-          "/usr/share/lhub/drivers": "../../drivers",
-          "/usr/lib/udev/rules.d/70-lhub.rules": "../../packaging/udev/70-lhub.rules",
-          "/usr/lib/systemd/user/lhubd.service": "../../packaging/systemd/lhubd.service",
-          "/usr/share/icons/hicolor/256x256/apps/lhub.png": "icons/icon.png",
-          "/usr/share/doc/lhub/LICENSE-MIT": "../../LICENSE-MIT",
-          "/usr/share/doc/lhub/LICENSE-APACHE": "../../LICENSE-APACHE",
-          "/usr/share/doc/lhub/NOTICE.md": "../../NOTICE.md",
-          "/usr/share/doc/lhub/README.md": "../../README.md"
+          "/usr/bin/glowdend": "../../target/release/glowdend",
+          "/usr/bin/glowdenctl": "../../target/release/glowdenctl",
+          "/usr/bin/glowden-voice": "../../target/release/glowden-voice",
+          "/usr/bin/glowden-sampler": "../../target/release/glowden-sampler",
+          "/usr/share/glowden/drivers": "../../drivers",
+          "/usr/lib/udev/rules.d/70-glowden.rules": "../../packaging/udev/70-glowden.rules",
+          "/usr/lib/systemd/user/glowdend.service": "../../packaging/systemd/glowdend.service",
+          "/usr/share/icons/hicolor/256x256/apps/glowden.png": "icons/icon.png",
+          "/usr/share/doc/glowden/LICENSE-MIT": "../../LICENSE-MIT",
+          "/usr/share/doc/glowden/LICENSE-APACHE": "../../LICENSE-APACHE",
+          "/usr/share/doc/glowden/NOTICE.md": "../../NOTICE.md",
+          "/usr/share/doc/glowden/README.md": "../../README.md"
         }
       }
     },
-    "publisher": "LHUB contributors"
+    "publisher": "GlowDen contributors"
   }
 }

@@ -1,6 +1,6 @@
 # Adding a device
 
-Most Logitech G devices speak HID++ 2.0 and report their features. lhub drives the standard
+Most Logitech G devices speak HID++ 2.0 and report their features. glowden drives the standard
 ones for any device that has them, without a definition:
 
 | Feature | What works automatically |
@@ -17,20 +17,20 @@ positions, key geometry, buttons the host has to handle, and firmware-only effec
 
 ## Step by step
 
-1. **Identify the device.** `target/release/lhub list` prints each device with its USB
+1. **Identify the device.** `target/release/glowdenctl list` prints each device with its USB
    product id and HID++ features. Note the product id (`046d:XXXX`) and which of the
    features above it has.
 2. **Write a minimal definition** in `drivers/<device>.toml` (or
-   `~/.local/share/lhub/drivers/` for a personal one):
+   `~/.local/share/glowden/drivers/` for a personal one):
    ```toml
    name = "G502 X PLUS"
    kind = "mouse"            # keyboard | mouse | headset | microphone
    products = [0x4099]       # receiver-attached devices: the device's own id, not the receiver's
-   ghub_model = "g502x_plus" # folder for its pictures in ~/.local/share/lhub/devices/
+   ghub_model = "g502x_plus" # folder for its pictures in ~/.local/share/glowden/devices/
    ```
 3. **Restart the service** and check its log. When the app started the service, kill it
-   (`for p in $(pgrep -x lhubd); do kill $p; done`) and the app starts it again; otherwise
-   `setsid -f target/release/lhubd >> ~/.local/state/lhub/lhubd.log 2>&1`.
+   (`for p in $(pgrep -x glowdend); do kill $p; done`) and the app starts it again; otherwise
+   `setsid -f target/release/glowdend >> ~/.local/state/glowden/glowdend.log 2>&1`.
    The log lists `driver: <name> from <file>` for every definition it loaded, or why it
    skipped one.
 4. **Add a picture** (next section), then the optional parts: [buttons the host
@@ -41,7 +41,7 @@ positions, key geometry, buttons the host has to handle, and firmware-only effec
 
 ## Pictures
 
-The viewer lights the LEDs in the device picture. Three sources, in the order lhub tries
+The viewer lights the LEDs in the device picture. Three sources, in the order glowden tries
 them:
 
 ### 1. G HUB's own pictures (best)
@@ -50,10 +50,10 @@ G HUB keeps per-device packages with pictures and LED geometry. Copy
 `C:\ProgramData\LGHUB\depots` from a Windows install that has seen the device, then:
 
 ```sh
-lhub import-ghub /path/to/depots
+glowdenctl import-ghub /path/to/depots
 ```
 
-Packages land in `~/.local/share/lhub/devices/<model>/`. lhub picks the picture whose pixel
+Packages land in `~/.local/share/glowden/devices/<model>/`. glowden picks the picture whose pixel
 size matches the LED geometry in `metadata.json`. These pictures have transparent cutouts
 where light shines through (key legends, logos, diffusers), and the live colors are drawn
 behind them, as G HUB does. Nothing needs to go in the definition beyond `ghub_model`.
@@ -64,7 +64,7 @@ skips them; use a product photo instead.
 ### 2. A product photo
 
 The manufacturer's public product photo, downloaded once by the service into
-`~/.local/share/lhub/devices/<model>/product-photo.png`. It is never shipped with lhub.
+`~/.local/share/glowden/devices/<model>/product-photo.png`. It is never shipped with glowden.
 
 1. **Find a top view.** On the product page at logitechg.com, the gallery images are
    under `https://resource.logitechg.com/<format>/content/dam/gaming/…/gallery/…-top-angle-…png`.
@@ -74,7 +74,7 @@ The manufacturer's public product photo, downloaded once by the service into
    bounding box, which is the `crop`.
 3. **Place the LEDs.** Pick one point per zone on the lit area of the photo, in
    cropped-photo pixels. To find which zone is where, light one zone at a time
-   (`lhub <device> key <zone> ff0000`) and look at the device. Then:
+   (`glowdenctl <device> key <zone> ff0000`) and look at the device. Then:
    ```sh
    tools/photo-regions.py photo.png --crop X Y W H --top 850 \
        --point 1:265,1280 --point 2:660,1390 ... --preview preview.png
@@ -113,8 +113,8 @@ Without any picture, the page shows a generic device icon with one colored dot p
 
 ## Buttons the host handles
 
-When lhub takes over a mouse's lighting, the mouse switches to host mode and leaves some
-buttons to the host. On the G502 X PLUS these are DPI up, DPI down and DPI shift. lhub
+When glowden takes over a mouse's lighting, the mouse switches to host mode and leaves some
+buttons to the host. On the G502 X PLUS these are DPI up, DPI down and DPI shift. glowden
 watches them through the button spy feature (`0x8110`) and steps through the DPI levels
 from the Sensitivity panel; the level chosen with the buttons is saved.
 
@@ -131,7 +131,7 @@ button n is bit n−1.
 
 The same feature lets the Assignments page give any button another job (a key or shortcut,
 a macro, a mouse button, scrolling, DPI, a program). An assigned button is told to send
-nothing to the PC, and lhub performs its action through a virtual input device
+nothing to the PC, and glowden performs its action through a virtual input device
 (`/dev/uinput`, see `packaging/udev`). Name the buttons and set what unassigned buttons send:
 
 ```toml
@@ -147,9 +147,9 @@ Button numbers can be found with "Detect button" on the Assignments page.
 
 ## Firmware effects
 
-Effects stored in the device. Find candidates with `lhub <device> effects` (cluster `0xff`
+Effects stored in the device. Find candidates with `glowdenctl <device> effects` (cluster `0xff`
 lists the all-zones effects) and try them with
-`lhub <device> raw-effect <cluster> <index> <hex params>`.
+`glowdenctl <device> raw-effect <cluster> <index> <hex params>`.
 
 ```toml
 [[firmware_effect]]
@@ -175,10 +175,10 @@ reactive = true      # read key presses from the device for reactive effects
 
 In this order; a later file wins for the same product id:
 
-1. `/usr/share/lhub/drivers/` (shipped definitions)
+1. `/usr/share/glowden/drivers/` (shipped definitions)
 2. `drivers/` in the repo (development builds)
-3. `~/.local/share/lhub/drivers/` (your own)
-4. directories in `$LHUB_DRIVERS`
+3. `~/.local/share/glowden/drivers/` (your own)
+4. directories in `$GLOWDEN_DRIVERS`
 
 ## Field reference
 
@@ -199,10 +199,10 @@ In this order; a later file wins for the same product id:
 
 ## Probing and captures
 
-- `lhub <device> call <feature> <function> [hex params]` sends one HID++ request and prints
+- `glowdenctl <device> call <feature> <function> [hex params]` sends one HID++ request and prints
   the reply. Use reads (usually function 0 or 1) first, and follow the device safety rules
   in `CLAUDE.md` before writing anything.
-- `LHUB_DEBUG=1` prints every frame the CLI or service sends and receives.
+- `GLOWDEN_DEBUG=1` prints every frame the CLI or service sends and receives.
 - To see what G HUB does, run it in a Windows VM with the device passed through and record
   the USB traffic with the scripts in `../vm/` (next to this repo, not part of it):
   `start.sh <device>`, `capture.sh <device> <label>` while changing
@@ -211,7 +211,7 @@ In this order; a later file wins for the same product id:
 
 ## When data isn't enough
 
-New protocol behaviour (a feature lhub doesn't implement yet) goes in
+New protocol behaviour (a feature glowden doesn't implement yet) goes in
 `crates/hidpp/src/devices.rs` as a function per feature, keyed by HID++ feature id, so every
 device with that feature gets it. Record where the bytes came from (USB capture, device
 reply) in a comment.

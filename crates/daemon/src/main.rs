@@ -1,4 +1,4 @@
-//! lhubd: owns the devices, keeps their configuration applied, and serves the UI over a
+//! glowdend: owns the devices, keeps their configuration applied, and serves the UI over a
 //! Unix socket with one JSON request/response per line.
 
 mod app;
@@ -130,7 +130,7 @@ pub fn socket_path() -> PathBuf {
     let dir = std::env::var_os("XDG_RUNTIME_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/tmp"));
-    dir.join("lhub.sock")
+    dir.join("glowden.sock")
 }
 
 /// Holds an exclusive lock for the life of the process, so two services started at the
@@ -148,12 +148,36 @@ fn single_instance() -> Option<std::fs::File> {
     ok.then_some(file)
 }
 
+/// The project was called lhub before GlowDen: move its folders over once, and point saved
+/// paths (sound clips, imported files) at the new data folder.
+fn migrate_from_lhub() {
+    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
+        return;
+    };
+    for dir in [".config", ".local/share", ".local/state"] {
+        let (old, new) = (home.join(dir).join("lhub"), home.join(dir).join("glowden"));
+        if old.is_dir() && !new.exists() && std::fs::rename(&old, &new).is_ok() {
+            eprintln!("moved {} to {}", old.display(), new.display());
+        }
+    }
+    let config = home.join(".config/glowden/config.json");
+    if let Ok(text) = std::fs::read_to_string(&config)
+        && text.contains("/.local/share/lhub/")
+    {
+        let _ = std::fs::write(
+            &config,
+            text.replace("/.local/share/lhub/", "/.local/share/glowden/"),
+        );
+    }
+}
+
 fn main() {
     let path = socket_path();
     let Some(_lock) = single_instance() else {
-        eprintln!("lhubd already running ({})", path.display());
+        eprintln!("glowdend already running ({})", path.display());
         return;
     };
+    migrate_from_lhub();
     // Only the instance that owns the lock may clean up, or a second start would kill the
     // running service's hosts.
     voice::stop_stale();
@@ -162,7 +186,7 @@ fn main() {
     let _ = std::fs::remove_file(&path);
     let listener =
         UnixListener::bind(&path).unwrap_or_else(|e| panic!("bind {}: {e}", path.display()));
-    eprintln!("lhubd listening on {}", path.display());
+    eprintln!("glowdend listening on {}", path.display());
 
     let shared: Shared = Arc::new((
         Mutex::new(State {
@@ -655,7 +679,7 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
         Request::ExportLightingPresets => {
             let st = lock.lock().unwrap();
             let file = PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
-                .join("lhub-lighting-presets.json");
+                .join("glowden-lighting-presets.json");
             std::fs::write(
                 &file,
                 serde_json::to_vec_pretty(&st.config.lighting_presets).unwrap(),
@@ -780,7 +804,7 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
                 .ok_or("no such profile")?;
             let dir = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
             let file = dir.join(format!(
-                "lhub-profile-{}.json",
+                "glowden-profile-{}.json",
                 name.replace(['/', ' '], "-")
             ));
             std::fs::write(&file, serde_json::to_vec_pretty(p).unwrap())
@@ -1301,7 +1325,7 @@ fn profiles(st: &State) -> Value {
 /// Imported sound clips as (category/name, path).
 fn sounds() -> Vec<Value> {
     let dir = PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
-        .join(".local/share/lhub/sounds");
+        .join(".local/share/glowden/sounds");
     let mut out = Vec::new();
     for cat in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
         for f in std::fs::read_dir(cat.path())

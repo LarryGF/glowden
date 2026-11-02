@@ -1,4 +1,4 @@
-//! The screen's colors on a grid, from `lhub-sampler` (the desktop's ScreenCast portal). One
+//! The screen's colors on a grid, from `glowden-sampler` (the desktop's ScreenCast portal). One
 //! capture is shared by every device showing the screen sampler effect.
 
 use std::io::Read;
@@ -30,9 +30,9 @@ static SHARED: Mutex<Weak<ScreenSampler>> = Mutex::new(Weak::new());
 fn binary() -> PathBuf {
     std::env::current_exe()
         .ok()
-        .and_then(|e| Some(e.parent()?.join("lhub-sampler")))
+        .and_then(|e| Some(e.parent()?.join("glowden-sampler")))
         .filter(|p| p.exists())
-        .unwrap_or_else(|| PathBuf::from("lhub-sampler"))
+        .unwrap_or_else(|| PathBuf::from("glowden-sampler"))
 }
 
 impl ScreenSampler {
@@ -43,8 +43,8 @@ impl ScreenSampler {
         if let Some(s) = shared.upgrade() {
             return Ok(s);
         }
-        let state =
-            PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/state/lhub");
+        let state = PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
+            .join(".local/state/glowden");
         let _ = std::fs::create_dir_all(&state);
         let mut child = Command::new(binary())
             .args(["--grid", &format!("{COLS}x{ROWS}")])

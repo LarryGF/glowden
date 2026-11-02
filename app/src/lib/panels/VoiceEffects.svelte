@@ -163,7 +163,7 @@
 <section>
   <h3>Voice effects</h3>
   {#if voice.effects.length === 0}
-    <p class="note">Import G HUB's voice effects with <code>lhub import-voice-presets settings.json</code> (or the G HUB folder scan in Settings).</p>
+    <p class="note">Import G HUB's voice effects with <code>glowdenctl import-voice-presets settings.json</code> (or the G HUB folder scan in Settings).</p>
   {:else}
     <div class="effects">
       {#each voice.effects as e (e.name)}

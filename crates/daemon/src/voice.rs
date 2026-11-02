@@ -1,6 +1,6 @@
-//! Blue VO!CE: runs `lhub-voice` (the user's own copy of the ClearVoice 2 engine as a
+//! Blue VO!CE: runs `glowden-voice` (the user's own copy of the ClearVoice 2 engine as a
 //! PipeWire virtual microphone) for devices whose driver file has a `[voice]` section.
-//! Engine and presets are imported with `lhub import-ghub` / `lhub import-voice-presets`.
+//! Engine and presets are imported with `glowdenctl import-ghub` / `glowdenctl import-voice-presets`.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -11,7 +11,7 @@ use serde_json::Value;
 use crate::drivers::VoiceDef;
 
 pub fn dir() -> PathBuf {
-    PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/share/lhub/voice")
+    PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/share/glowden/voice")
 }
 
 pub fn engine() -> Option<PathBuf> {
@@ -81,7 +81,7 @@ const FIELDS: &[(&str, u16, char)] = &[
     ("hardLimiter.enabled", 0x150, 'b'),
 ];
 
-/// `lhub-voice` arguments setting each preset field present in `settings`.
+/// `glowden-voice` arguments setting each preset field present in `settings`.
 pub fn engine_args(settings: &Value) -> Vec<String> {
     let mut args = Vec::new();
     for &(path, offset, kind) in FIELDS {
@@ -325,7 +325,7 @@ fn pactl(args: &[&str]) -> Option<String> {
 pub fn make_default() {
     std::thread::spawn(|| {
         for _ in 0..30 {
-            if pactl(&["set-default-source", "lhub-bluevoice"]).is_some() {
+            if pactl(&["set-default-source", "glowden-voice-mic"]).is_some() {
                 return;
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
@@ -336,7 +336,7 @@ pub fn make_default() {
 
 /// Hands the default input back to the real microphone if VO!CE had it.
 pub fn release_default(def: &VoiceDef) {
-    if pactl(&["get-default-source"]).as_deref() == Some("lhub-bluevoice")
+    if pactl(&["get-default-source"]).as_deref() == Some("glowden-voice-mic")
         && let Some(source) = source_node(&def.source)
     {
         pactl(&["set-default-source", &source]);
@@ -346,9 +346,9 @@ pub fn release_default(def: &VoiceDef) {
 fn binary() -> PathBuf {
     std::env::current_exe()
         .ok()
-        .and_then(|e| Some(e.parent()?.join("lhub-voice")))
+        .and_then(|e| Some(e.parent()?.join("glowden-voice")))
         .filter(|p| p.exists())
-        .unwrap_or_else(|| PathBuf::from("lhub-voice"))
+        .unwrap_or_else(|| PathBuf::from("glowden-voice"))
 }
 
 /// Fine-tuning controls offered on top of a preset (G HUB's advanced VO!CE controls): preset
@@ -561,7 +561,7 @@ pub fn summary(settings: &Value) -> Value {
 
 fn test_dir() -> PathBuf {
     PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR").unwrap_or_else(|| "/tmp".into()))
-        .join("lhub-voice-test")
+        .join("glowden-voice-test")
 }
 
 /// Records `seconds` of the raw microphone for the preset test.
@@ -658,19 +658,19 @@ impl Voice {
     }
 
     fn spawn(def: &VoiceDef, args: &[String]) -> Result<Child, String> {
-        let dll = engine().ok_or("the engine isn't imported yet (lhub import-ghub)")?;
+        let dll = engine().ok_or("the engine isn't imported yet (glowdenctl import-ghub)")?;
         let source = source_node(&def.source)
             .ok_or_else(|| format!("no PipeWire source matching \"{}\"", def.source))?;
         Command::new(binary())
             .arg(dll)
-            .args(["--target", &source, "--name", "lhub-bluevoice"])
+            .args(["--target", &source, "--name", "glowden-voice-mic"])
             .args(["--description", &def.description])
             .args(args)
             // Later settings arrive on stdin, applied without restarting; levels come back on stdout.
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()
-            .map_err(|e| format!("cannot start lhub-voice: {e}"))
+            .map_err(|e| format!("cannot start glowden-voice: {e}"))
     }
 
     /// Plays the test recording as recorded (`None`) or with these host arguments.
@@ -692,7 +692,7 @@ impl Voice {
                     .args([&raw, &out])
                     .stdin(Stdio::null())
                     .status()
-                    .map_err(|e| format!("cannot start lhub-voice: {e}"))?;
+                    .map_err(|e| format!("cannot start glowden-voice: {e}"))?;
                 if !status.success() {
                     return Err("processing the test failed".into());
                 }
@@ -751,7 +751,8 @@ pub fn stop_stale() {
         let Ok(pid) = e.file_name().to_string_lossy().parse::<i32>() else {
             continue;
         };
-        if std::fs::read_to_string(e.path().join("comm")).is_ok_and(|c| c.trim() == "lhub-voice") {
+        if std::fs::read_to_string(e.path().join("comm")).is_ok_and(|c| c.trim() == "glowden-voice")
+        {
             unsafe { libc::kill(pid, libc::SIGTERM) };
         }
     }

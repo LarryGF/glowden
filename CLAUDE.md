@@ -5,9 +5,9 @@ track what is done, verified, and next.
 
 ## Architecture
 
-- `lhubd` (crates/daemon) is the only process that should talk to devices. One worker
+- `glowdend` (crates/daemon) is the only process that should talk to devices. One worker
   thread per device owns its `hidpp::Device`; the UI and CLI-over-socket send JSON lines to
-  `$XDG_RUNTIME_DIR/lhub.sock`. Config: `~/.config/lhub/config.json`, keyed by stable id
+  `$XDG_RUNTIME_DIR/glowden.sock`. Config: `~/.config/glowden/config.json`, keyed by stable id
   `<usb port>:<product id>`.
 - The app (`app/`) never opens devices; `app/src-tauri/src/main.rs` only relays requests.
 - `crates/hidpp` holds protocol code. Decoded device behaviour goes in `devices.rs` with a
@@ -25,16 +25,16 @@ track what is done, verified, and next.
 ## Building
 
 - Build the app with `cd app && pnpm tauri build`. A plain `cargo build` also rebuilds
-  `target/release/lhub-app`, but without the `custom-protocol` feature, so the window loads
+  `target/release/glowden`, but without the `custom-protocol` feature, so the window loads
   the dev server (`localhost:1420`) and shows "Connection refused". After a workspace
   `cargo build`, run `pnpm tauri build` again.
 
 ## Testing against hardware
 
-- `target/release/lhub list` and `LHUB_DEBUG=1` frame traces are the main tools.
+- `target/release/glowdenctl list` and `GLOWDEN_DEBUG=1` frame traces are the main tools.
 - Stop the service before CLI experiments that stream to the same device:
-  `for p in $(pgrep -x lhubd); do kill $p; done` — never `pkill -f lhubd` (it matches the
-  calling shell). Restart with `setsid -f target/release/lhubd >> ~/.local/state/lhub/lhubd.log 2>&1`.
+  `for p in $(pgrep -x glowdend); do kill $p; done` — never `pkill -f glowdend` (it matches the
+  calling shell). Restart with `setsid -f target/release/glowdend >> ~/.local/state/glowden/glowdend.log 2>&1`.
 - Wireless devices sleep; the transport retries with growing timeouts. Discovery backs off
   silent nodes for 30 s.
 - hidraw numbers change across replug; use the stable ids.
@@ -42,7 +42,7 @@ track what is done, verified, and next.
 ## Logitech material
 
 - Do not commit Logitech binaries, pictures, presets or data files. Pictures and LED
-  geometry are imported at runtime (`lhub import-ghub`); the VO!CE DLL is the user's own copy.
+  geometry are imported at runtime (`glowdenctl import-ghub`); the VO!CE DLL is the user's own copy.
 - Do not decrypt protected assets.
 - Original effects and presets only: generic effect types are fine, Logitech's named
   keyframe animations are not to be transcribed.

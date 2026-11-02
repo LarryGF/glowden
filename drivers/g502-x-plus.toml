@@ -19,7 +19,7 @@ picture = "pictures/g502-x-plus.svg"
 picture_clip = "M300 190 C 420 60, 970 60, 1090 190 C 1260 430, 1330 900, 1300 1500 C 1290 1900, 1250 2350, 1050 2560 C 900 2690, 490 2690, 340 2560 C 140 2350, 100 1900, 90 1500 C 60 900, 130 430, 300 190 Z"
 
 # Logitech's public product photo, downloaded once on first use and kept in
-# ~/.local/share/lhub/devices/<model>/ (not shipped). crop = x, y, width, height of the mouse.
+# ~/.local/share/glowden/devices/<model>/ (not shipped). crop = x, y, width, height of the mouse.
 # Plain f_png: "q_auto" makes the CDN send a 256-color version with jagged edges.
 # "vivid" cutout: strongly colored pixels inside the LED regions (the lit strip) become
 # openings that show the live zone colors.

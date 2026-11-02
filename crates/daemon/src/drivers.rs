@@ -132,17 +132,17 @@ impl FirmwareEffect {
 /// Where definitions are read from, lowest priority first. Later files override earlier ones
 /// for the same product, so a user file can patch a shipped definition.
 fn search_path() -> Vec<PathBuf> {
-    let mut dirs = vec![PathBuf::from("/usr/share/lhub/drivers")];
-    // Development builds: <repo>/target/<profile>/lhubd → <repo>/drivers.
+    let mut dirs = vec![PathBuf::from("/usr/share/glowden/drivers")];
+    // Development builds: <repo>/target/<profile>/glowdend → <repo>/drivers.
     if let Ok(exe) = std::env::current_exe()
         && let Some(repo) = exe.parent().and_then(Path::parent).and_then(Path::parent)
     {
         dirs.push(repo.join("drivers"));
     }
     if let Some(home) = std::env::var_os("HOME") {
-        dirs.push(PathBuf::from(home).join(".local/share/lhub/drivers"));
+        dirs.push(PathBuf::from(home).join(".local/share/glowden/drivers"));
     }
-    if let Some(extra) = std::env::var_os("LHUB_DRIVERS") {
+    if let Some(extra) = std::env::var_os("GLOWDEN_DRIVERS") {
         dirs.extend(std::env::split_paths(&extra));
     }
     dirs
@@ -205,7 +205,7 @@ impl Registry {
 /// Writes a starter definition for a connected device into the user's driver folder.
 pub fn create_starter(name: &str, kind: &str, product: u16) -> Result<PathBuf, String> {
     let dir = PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?)
-        .join(".local/share/lhub/drivers");
+        .join(".local/share/glowden/drivers");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let slug: String = name
         .to_lowercase()
@@ -222,12 +222,12 @@ pub fn create_starter(name: &str, kind: &str, product: u16) -> Result<PathBuf, S
     }
     let model = slug.replace('-', "_");
     let text = format!(
-        "# Starter definition written by lhub. See docs/adding-devices.md for pictures, LED\n\
+        "# Starter definition written by glowden. See docs/adding-devices.md for pictures, LED\n\
          # positions, host-handled buttons and firmware effects.\n\
          name = \"{name}\"\n\
          kind = \"{kind}\"\n\
          products = [0x{product:04x}]\n\
-         # Folder of its pictures in ~/.local/share/lhub/devices/ (G HUB's model name).\n\
+         # Folder of its pictures in ~/.local/share/glowden/devices/ (G HUB's model name).\n\
          ghub_model = \"{model}\"\n"
     );
     std::fs::write(&file, text).map_err(|e| e.to_string())?;

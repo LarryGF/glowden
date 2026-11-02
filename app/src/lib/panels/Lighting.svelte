@@ -214,7 +214,7 @@
       {/each}
     </div>
     {#if options.some((o) => o.group === "live")}
-      <h3>Live <span class="hint">drawn by the LHUB service</span></h3>
+      <h3>Live <span class="hint">drawn by the GlowDen service</span></h3>
       <div class="effects">
         {#each options.filter((o) => o.group === "live") as o}
           <button class:active={effect === o.key} onclick={() => { effect = o.key; push(); }}>{o.label}</button>
@@ -275,7 +275,7 @@
     {#if effect === "screen"}
       <label><span class="label">Color boost <em>{boost}</em></span><input type="range" min="0" max="100" bind:value={boost} oninput={push} /></label>
       <p class="note">
-        The first time, your desktop asks which screen to share; LHUB remembers the answer.
+        The first time, your desktop asks which screen to share; GlowDen remembers the answer.
         Each key shows the part of the screen at its place on the board.
       </p>
     {/if}
@@ -334,7 +334,7 @@
     {tab === "freestyle"
       ? "Freestyle is sent to the device once and stays there."
       : current?.group === "live"
-      ? "Live effects keep running after you close this window, as long as the LHUB service runs."
+      ? "Live effects keep running after you close this window, as long as the GlowDen service runs."
       : "This effect runs on the device itself and stays after the service stops."}
   </p>
 </div>

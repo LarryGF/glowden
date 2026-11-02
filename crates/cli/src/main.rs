@@ -4,17 +4,17 @@ use hidpp::devices::{self, Effect, mic};
 use hidpp::features;
 
 const USAGE: &str = "usage:
-  lhub list                                  devices and their HID++ features
-  lhub import-ghub <dir>                     copy device pictures/layouts (and the VO!CE engine) from G HUB depots
-  lhub import-voice-presets <settings.db|.json>  copy the Blue VO!CE presets from G HUB's settings
-  lhub <dev> color RRGGBB
-  lhub <dev> breathe RRGGBB [period_ms] [intensity%]
-  lhub <dev> cycle [period_ms] [intensity%] [saturation]
-  lhub <dev> brightness <0-100>
-  lhub <dev> release                         hand lighting/profiles back to the device
-  lhub <dev> animate wave|pulse|starlight    host-rendered per-key effect (Ctrl+C stops)
-  lhub <dev> gain [0-100]                    microphones
-  lhub <dev> mute | unmute
+  glowdenctl list                                  devices and their HID++ features
+  glowdenctl import-ghub <dir>                     copy device pictures/layouts (and the VO!CE engine) from G HUB depots
+  glowdenctl import-voice-presets <settings.db|.json>  copy the Blue VO!CE presets from G HUB's settings
+  glowdenctl <dev> color RRGGBB
+  glowdenctl <dev> breathe RRGGBB [period_ms] [intensity%]
+  glowdenctl <dev> cycle [period_ms] [intensity%] [saturation]
+  glowdenctl <dev> brightness <0-100>
+  glowdenctl <dev> release                         hand lighting/profiles back to the device
+  glowdenctl <dev> animate wave|pulse|starlight    host-rendered per-key effect (Ctrl+C stops)
+  glowdenctl <dev> gain [0-100]                    microphones
+  glowdenctl <dev> mute | unmute
 <dev> is a case-insensitive part of the device name, e.g. yeti, g515, g502";
 
 fn main() -> ExitCode {
@@ -313,8 +313,8 @@ fn audio_levels() -> CmdResult {
 }
 
 /// Copies device resource packages (pictures, image geometry, light maps, battery curves)
-/// out of a G HUB `depots` folder into ~/.local/share/lhub/devices/<model>/. They stay on
-/// this machine; nothing from G HUB is shipped with lhub.
+/// out of a G HUB `depots` folder into ~/.local/share/glowden/devices/<model>/. They stay on
+/// this machine; nothing from G HUB is shipped with glowden.
 fn import_ghub(root: &std::path::Path) -> CmdResult {
     use std::path::{Path, PathBuf};
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -345,7 +345,7 @@ fn import_ghub(root: &std::path::Path) -> CmdResult {
                     | "defaults_override.json"
             )
     };
-    let dest_root = PathBuf::from(std::env::var("HOME")?).join(".local/share/lhub/devices");
+    let dest_root = PathBuf::from(std::env::var("HOME")?).join(".local/share/glowden/devices");
     let mut manifests = Vec::new();
     walk(root, &mut manifests);
     let models = ["g515_ls_tkl", "g502x_plus", "g522", "yeti_gx"];
@@ -424,7 +424,7 @@ fn find_file(dir: &std::path::Path, names: &[&str]) -> Option<std::path::PathBuf
 }
 
 /// G HUB's sound clips (the `audio_samples` package), under readable names in
-/// ~/.local/share/lhub/sounds/<category>/, for the "play a sound" button action.
+/// ~/.local/share/glowden/sounds/<category>/, for the "play a sound" button action.
 fn import_sounds(root: &std::path::Path) -> CmdResult {
     fn find(dir: &std::path::Path) -> Option<std::path::PathBuf> {
         for e in std::fs::read_dir(dir).ok()?.flatten() {
@@ -447,7 +447,7 @@ fn import_sounds(root: &std::path::Path) -> CmdResult {
     };
     let package = manifest.parent().unwrap();
     let json: serde_json::Value = serde_json::from_slice(&std::fs::read(&manifest)?)?;
-    let dest = std::path::PathBuf::from(std::env::var("HOME")?).join(".local/share/lhub/sounds");
+    let dest = std::path::PathBuf::from(std::env::var("HOME")?).join(".local/share/glowden/sounds");
     let mut count = 0;
     for r in json["resources"].as_array().into_iter().flatten() {
         let (Some(key), Some(src)) = (r["key"].as_str(), r["src"].as_str()) else {
@@ -472,7 +472,7 @@ fn import_sounds(root: &std::path::Path) -> CmdResult {
 }
 
 fn voice_dir() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
-    Ok(std::path::PathBuf::from(std::env::var("HOME")?).join(".local/share/lhub/voice"))
+    Ok(std::path::PathBuf::from(std::env::var("HOME")?).join(".local/share/glowden/voice"))
 }
 
 /// The Blue VO!CE 2 engine is one of the DLLs embedded in G HUB's audio driver installer

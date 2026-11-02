@@ -137,11 +137,11 @@
     {#if !state.engine}
       <p class="note">
         The VO!CE engine comes from your own G HUB download. Import it with
-        <code>lhub import-ghub &lt;G HUB depots folder&gt;</code>.
+        <code>glowdenctl import-ghub &lt;G HUB depots folder&gt;</code>.
       </p>
     {:else if state.presets.length === 0}
       <p class="note">
-        Import the presets from G HUB's settings with <code>lhub import-voice-presets settings.json</code>.
+        Import the presets from G HUB's settings with <code>glowdenctl import-voice-presets settings.json</code>.
       </p>
     {:else}
       <section>

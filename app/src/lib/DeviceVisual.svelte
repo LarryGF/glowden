@@ -4,8 +4,8 @@
 
   let { device, size }: { device: Device; size: number } = $props();
 
-  // Pictures come from the user's own G HUB install (lhub import-ghub); cached per device.
-  const cache: Map<string, Promise<string | null>> = ((globalThis as any).__lhubImages ??= new Map());
+  // Pictures come from the user's own G HUB install (glowdenctl import-ghub); cached per device.
+  const cache: Map<string, Promise<string | null>> = ((globalThis as any).__glowdenImages ??= new Map());
   let src = $state<string | null>(null);
 
   $effect(() => {

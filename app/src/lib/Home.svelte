@@ -9,7 +9,7 @@
   // G HUB's home layout choice; a per-viewer preference.
   const read = () => {
     try {
-      return localStorage.getItem("lhub-home-layout") === "list" ? "list" : "grid";
+      return localStorage.getItem("glowden-home-layout") === "list" ? "list" : "grid";
     } catch {
       return "grid";
     }
@@ -18,7 +18,7 @@
   function setLayout(l: "grid" | "list") {
     layout = l;
     try {
-      localStorage.setItem("lhub-home-layout", l);
+      localStorage.setItem("glowden-home-layout", l);
     } catch {
       /* not kept */
     }

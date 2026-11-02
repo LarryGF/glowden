@@ -5,7 +5,7 @@
  * pick as a microphone. Both streams run on the PipeWire main loop thread, the only thread
  * that calls into the DLL.
  *
- *   lhub-voice <dll> [--target NODE] [--name NAME] [--description TEXT]
+ *   glowden-voice <dll> [--target NODE] [--name NAME] [--description TEXT]
  *              [f OFF VALUE]... [b OFF VALUE]... [u OFF VALUE]...
  *
  * f/b/u set a float, byte or u32 in the parameter block (offsets in hex, see docs/voice.md).
@@ -263,7 +263,7 @@ static int parse_settings(char **tok, int n, settings *out)
             size_t k = 0;
             while (k < STAGES && strcmp(tok[i], stages[k].section)) k++;
             if (k == STAGES) {
-                fprintf(stderr, "lhub-voice: unknown section %s\n", tok[i]);
+                fprintf(stderr, "glowden-voice: unknown section %s\n", tok[i]);
                 return -1;
             }
             out->fx_on[k] = 1;
@@ -272,7 +272,7 @@ static int parse_settings(char **tok, int n, settings *out)
             continue;
         }
         if (i + 2 >= n || !strchr("fbu", tok[i][0]) || tok[i][1] || set_field(target, cap, tok[i][0], tok[i + 1], tok[i + 2])) {
-            fprintf(stderr, "lhub-voice: bad setting %s\n", tok[i]);
+            fprintf(stderr, "glowden-voice: bad setting %s\n", tok[i]);
             return -1;
         }
         if (!sections) loose = 1;
@@ -314,7 +314,7 @@ static int apply_settings(settings *set, int initial)
     if (set->cv2_on && !initial) {
         int r = update_params(st.inst, set->cv2);
         if (r) {
-            fprintf(stderr, "lhub-voice: engine rejected the new settings (%d)\n", r);
+            fprintf(stderr, "glowden-voice: engine rejected the new settings (%d)\n", r);
             err = r;
         }
     }
@@ -327,7 +327,7 @@ static int apply_settings(settings *set, int initial)
         }
         int r = stage_start(s, set->fx[i]);
         if (r) {
-            fprintf(stderr, "lhub-voice: %s rejected its settings (%d)\n", s->api, r);
+            fprintf(stderr, "glowden-voice: %s rejected its settings (%d)\n", s->api, r);
             err = err ? err : r;
             continue;
         }
@@ -344,7 +344,7 @@ static void apply_line(char *text)
     char *save = NULL;
     for (char *t = strtok_r(text, " \t", &save); t && n < 2048; t = strtok_r(NULL, " \t", &save)) tok[n++] = t;
     if (parse_settings(tok, n, &set)) return;
-    if (apply_settings(&set, 0) == 0) fprintf(stderr, "lhub-voice: settings updated\n");
+    if (apply_settings(&set, 0) == 0) fprintf(stderr, "glowden-voice: settings updated\n");
 }
 
 static void on_stdin(void *data, int fd, uint32_t mask)
@@ -399,12 +399,12 @@ static int process_file(const char *in_path, const char *out_path)
 {
     FILE *in = fopen(in_path, "rb");
     if (!in) {
-        fprintf(stderr, "lhub-voice: cannot open %s\n", in_path);
+        fprintf(stderr, "glowden-voice: cannot open %s\n", in_path);
         return 1;
     }
     uint8_t head[12];
     if (fread(head, 1, 12, in) != 12 || memcmp(head, "RIFF", 4) || memcmp(head + 8, "WAVE", 4)) {
-        fprintf(stderr, "lhub-voice: %s is not a WAV file\n", in_path);
+        fprintf(stderr, "glowden-voice: %s is not a WAV file\n", in_path);
         return 1;
     }
     uint32_t len = 0, rate = 0;
@@ -425,7 +425,7 @@ static int process_file(const char *in_path, const char *out_path)
         }
     }
     if (memcmp(id, "data", 4) || format != 3 || channels != 1 || rate != RATE) {
-        fprintf(stderr, "lhub-voice: %s must be 48 kHz mono float\n", in_path);
+        fprintf(stderr, "glowden-voice: %s must be 48 kHz mono float\n", in_path);
         return 1;
     }
     size_t n = len / sizeof(float), latency = st.cv2_active ? 1280 : 0;
@@ -459,19 +459,19 @@ static int process_file(const char *in_path, const char *out_path)
     return 0;
 }
 
-int lhub_voice_main(int argc, char **argv)
+int glowden_voice_main(int argc, char **argv)
 {
     if (argc < 2) {
-        fprintf(stderr, "usage: lhub-voice <dll> [--target NODE] [--name NAME] [--description TEXT] [f|b|u OFF V]...\n");
+        fprintf(stderr, "usage: glowden-voice <dll> [--target NODE] [--name NAME] [--description TEXT] [f|b|u OFF V]...\n");
         return 2;
     }
-    const char *target = NULL, *name = "lhub-bluevoice", *description = "Blue VO!CE";
+    const char *target = NULL, *name = "glowden-voice-mic", *description = "Blue VO!CE";
     const char *process_in = NULL, *process_out = NULL;
     static cv2_config cfg = {RATE, BLOCK, 1, RATE, BLOCK, 2, {0}};
 
     pe_image *img = pe_load(argv[1]);
     if (!img) {
-        fprintf(stderr, "lhub-voice: cannot load %s\n", argv[1]);
+        fprintf(stderr, "glowden-voice: cannot load %s\n", argv[1]);
         return 1;
     }
     int (WINAPI *get_size)(const cv2_config *, size_t *) = pe_export(img, "?dtsClearVoice2GetInstanceSize@");
@@ -479,7 +479,7 @@ int lhub_voice_main(int argc, char **argv)
     int (WINAPI *defaults)(void *) = pe_export(img, "?dtsClearVoice2GetDefaultParameters@");
     st.process = pe_export(img, "?dtsClearVoice2Process@");
     if (!get_size || !init || !defaults || !st.process) {
-        fprintf(stderr, "lhub-voice: %s is not the ClearVoice 2 engine\n", argv[1]);
+        fprintf(stderr, "glowden-voice: %s is not the ClearVoice 2 engine\n", argv[1]);
         return 1;
     }
     defaults(cfg.params);
@@ -500,7 +500,7 @@ int lhub_voice_main(int argc, char **argv)
         snprintf(sym, sizeof sym, "?dts%sGetDefaultParameters@", s->api);
         *(void **)&stage_defaults = pe_export(img, sym);
         if (!s->get_size || !s->init || !s->process || !s->update || !s->flush || !stage_defaults) {
-            fprintf(stderr, "lhub-voice: %s is missing the %s stage\n", argv[1], s->api);
+            fprintf(stderr, "glowden-voice: %s is missing the %s stage\n", argv[1], s->api);
             return 1;
         }
         stage_defaults(s->defaults);
@@ -525,14 +525,14 @@ int lhub_voice_main(int argc, char **argv)
 
     size_t size = 0;
     if (get_size(&cfg, &size)) {
-        fprintf(stderr, "lhub-voice: engine rejected the configuration\n");
+        fprintf(stderr, "glowden-voice: engine rejected the configuration\n");
         return 1;
     }
     st.inst = aligned_alloc(64, (size + 63) & ~(size_t)63);
     memset(st.inst, 0, size);
     int r = init(st.inst, &cfg);
     if (r) {
-        fprintf(stderr, "lhub-voice: engine rejected the parameters (%d)\n", r);
+        fprintf(stderr, "glowden-voice: engine rejected the parameters (%d)\n", r);
         return 1;
     }
     st.in = aligned_alloc(32, BLOCK * sizeof(float));
@@ -558,12 +558,12 @@ int lhub_voice_main(int argc, char **argv)
 
     struct pw_properties *cp = pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Capture",
                                                  PW_KEY_MEDIA_ROLE, "Communication", PW_KEY_NODE_NAME,
-                                                 "lhub-bluevoice-input", PW_KEY_NODE_DESCRIPTION,
+                                                 "glowden-voice-mic-input", PW_KEY_NODE_DESCRIPTION,
                                                  "Blue VO!CE input", PW_KEY_NODE_LATENCY, "256/48000", NULL);
     if (target) pw_properties_set(cp, PW_KEY_TARGET_OBJECT, target);
     /* Not offered to other apps as a stream to move: it belongs to the virtual mic. */
     pw_properties_set(cp, PW_KEY_NODE_DONT_RECONNECT, "true");
-    st.capture = pw_stream_new_simple(pw_main_loop_get_loop(st.loop), "lhub-bluevoice-input", cp,
+    st.capture = pw_stream_new_simple(pw_main_loop_get_loop(st.loop), "glowden-voice-mic-input", cp,
                                       &capture_events, NULL);
 
     struct pw_properties *sp = pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CLASS, "Audio/Source",
@@ -580,9 +580,9 @@ int lhub_voice_main(int argc, char **argv)
     params[0] = stereo_format(&b);
     pw_stream_connect(st.source, PW_DIRECTION_OUTPUT, PW_ID_ANY, PW_STREAM_FLAG_MAP_BUFFERS, params, 1);
 
-    fprintf(stderr, "lhub-voice: running as \"%s\"%s%s\n", description, target ? " from " : "", target ? target : "");
+    fprintf(stderr, "glowden-voice: running as \"%s\"%s%s\n", description, target ? " from " : "", target ? target : "");
     pw_main_loop_run(st.loop);
-    fprintf(stderr, "lhub-voice: captured %lu samples, processed %lu blocks (%lu failed), served %lu samples\n",
+    fprintf(stderr, "glowden-voice: captured %lu samples, processed %lu blocks (%lu failed), served %lu samples\n",
             st.captured, st.processed, st.failed, st.served);
 
     pw_stream_destroy(st.capture);

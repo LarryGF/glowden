@@ -1,4 +1,4 @@
-//! UI shell: every device operation goes to the lhubd service, which owns the devices
+//! UI shell: every device operation goes to the glowdend service, which owns the devices
 //! and keeps settings applied after the window closes.
 
 use std::io::{BufRead, BufReader, Write};
@@ -12,16 +12,16 @@ fn socket_path() -> PathBuf {
     std::env::var_os("XDG_RUNTIME_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join("lhub.sock")
+        .join("glowden.sock")
 }
 
 /// The service binary next to ours (dev builds, packages), else whatever is on PATH.
 fn daemon_binary() -> PathBuf {
     std::env::current_exe()
         .ok()
-        .and_then(|p| Some(p.parent()?.join("lhubd")))
+        .and_then(|p| Some(p.parent()?.join("glowdend")))
         .filter(|p| p.exists())
-        .unwrap_or_else(|| PathBuf::from("lhubd"))
+        .unwrap_or_else(|| PathBuf::from("glowdend"))
 }
 
 fn connect() -> Result<UnixStream, String> {
@@ -30,7 +30,7 @@ fn connect() -> Result<UnixStream, String> {
     }
     let mut child = std::process::Command::new(daemon_binary())
         .spawn()
-        .map_err(|e| format!("cannot start lhubd: {e}"))?;
+        .map_err(|e| format!("cannot start glowdend: {e}"))?;
     // Reap the service if it exits while the app is open, so it doesn't linger as a zombie.
     std::thread::spawn(move || child.wait());
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -40,7 +40,7 @@ fn connect() -> Result<UnixStream, String> {
             return Ok(s);
         }
     }
-    Err("lhubd did not start".into())
+    Err("glowdend did not start".into())
 }
 
 fn send(req: &Value) -> Result<Value, String> {
@@ -52,7 +52,7 @@ fn send(req: &Value) -> Result<Value, String> {
         .read_line(&mut line)
         .map_err(|e| e.to_string())?;
     let resp: Value =
-        serde_json::from_str(&line).map_err(|e| format!("bad reply from lhubd: {e}"))?;
+        serde_json::from_str(&line).map_err(|e| format!("bad reply from glowdend: {e}"))?;
     if resp["ok"].as_bool() == Some(true) {
         Ok(resp["data"].clone())
     } else {
@@ -78,7 +78,7 @@ fn tray_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::W
     menu.append(&MenuItem::with_id(
         app,
         "open",
-        "Open LHUB",
+        "Open GlowDen",
         true,
         None::<&str>,
     )?)?;
@@ -140,9 +140,9 @@ fn main() {
         .invoke_handler(tauri::generate_handler![request])
         .setup(|app| {
             let handle = app.handle().clone();
-            let built = tauri::tray::TrayIconBuilder::with_id("lhub")
+            let built = tauri::tray::TrayIconBuilder::with_id("glowden")
                 .icon(app.default_window_icon().cloned().expect("app icon"))
-                .tooltip("lhub")
+                .tooltip("GlowDen")
                 .menu(&tray_menu(&handle).map_err(|e| e.to_string())?)
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "open" => show_window(app),
@@ -159,7 +159,7 @@ fn main() {
             let tray = match built {
                 Ok(t) => t,
                 Err(e) => {
-                    eprintln!("lhub: no tray icon ({e}); closing the window quits");
+                    eprintln!("glowden: no tray icon ({e}); closing the window quits");
                     return Ok(());
                 }
             };
@@ -174,7 +174,7 @@ fn main() {
             });
             Ok(())
         })
-        // Closing the window keeps LHUB in the tray, as G HUB does; Quit is in the tray menu.
+        // Closing the window keeps GlowDen in the tray, as G HUB does; Quit is in the tray menu.
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event
                 && TRAY.load(std::sync::atomic::Ordering::Relaxed)
@@ -184,5 +184,5 @@ fn main() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("failed to start lhub");
+        .expect("failed to start glowden");
 }

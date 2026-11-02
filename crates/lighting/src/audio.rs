@@ -26,7 +26,7 @@ impl AudioMeter {
         let mut child = Command::new("pw-record")
             .args([
                 "-P",
-                "{ stream.capture.sink=true node.name=lhub-visualizer }",
+                "{ stream.capture.sink=true node.name=glowden-visualizer }",
             ])
             .args(["--format", "f32", "--channels", "1", "--rate", "48000", "-"])
             .stdout(Stdio::piped())

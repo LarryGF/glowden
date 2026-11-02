@@ -14,14 +14,14 @@
 
   function load(): string[] {
     try {
-      return JSON.parse(localStorage.getItem("lhub.customColors") ?? "[]");
+      return JSON.parse(localStorage.getItem("glowden.customColors") ?? "[]");
     } catch {
       return [];
     }
   }
   function save() {
     try {
-      localStorage.setItem("lhub.customColors", JSON.stringify(custom));
+      localStorage.setItem("glowden.customColors", JSON.stringify(custom));
     } catch {}
   }
 

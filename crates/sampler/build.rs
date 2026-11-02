@@ -24,6 +24,6 @@ fn main() {
             build.define(k, v);
         }
     }
-    build.compile("lhubsampler");
+    build.compile("glowdensampler");
     println!("cargo:rerun-if-changed=src/sampler.c");
 }

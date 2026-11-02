@@ -8,12 +8,12 @@ use dbus::blocking::Connection;
 use dbus::channel::MatchingReceiver;
 use dbus::message::MatchRule;
 
-const NAME: &str = "dev.lhub.Focus";
+const NAME: &str = "dev.glowden.Focus";
 
-const SCRIPT: &str = r#"// Installed by lhub: reports the focused window's app to the lhub service.
+const SCRIPT: &str = r#"// Installed by glowden: reports the focused window's app to the glowden service.
 function report(w) {
     if (!w) return;
-    callDBus("dev.lhub.Focus", "/focus", "dev.lhub.Focus", "Activated",
+    callDBus("dev.glowden.Focus", "/focus", "dev.glowden.Focus", "Activated",
              String(w.resourceClass || ""), String(w.caption || ""));
 }
 workspace.windowActivated.connect(report);
@@ -57,18 +57,20 @@ fn run(tx: Sender<Focus>) -> Result<(), Box<dyn std::error::Error>> {
 
 fn install_kwin_script(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     let dir = std::path::PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?)
-        .join(".local/share/lhub");
+        .join(".local/share/glowden");
     std::fs::create_dir_all(&dir)?;
     let path = dir.join("kwin-focus.js");
     std::fs::write(&path, SCRIPT)?;
     let scripting = conn.with_proxy("org.kde.KWin", "/Scripting", Duration::from_secs(5));
-    // A previous service run may have left its copy loaded.
-    let _: Result<(bool,), _> =
-        scripting.method_call("org.kde.kwin.Scripting", "unloadScript", ("lhub-focus",));
+    // A previous service run may have left its copy loaded (also under the old lhub name).
+    for name in ["glowden-focus", "lhub-focus"] {
+        let _: Result<(bool,), _> =
+            scripting.method_call("org.kde.kwin.Scripting", "unloadScript", (name,));
+    }
     let (id,): (i32,) = scripting.method_call(
         "org.kde.kwin.Scripting",
         "loadScript",
-        (path.to_string_lossy().to_string(), "lhub-focus"),
+        (path.to_string_lossy().to_string(), "glowden-focus"),
     )?;
     let script = conn.with_proxy(
         "org.kde.KWin",
