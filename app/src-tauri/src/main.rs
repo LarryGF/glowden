@@ -142,7 +142,8 @@ fn main() {
         .setup(|app| {
             let handle = app.handle().clone();
             let built = tauri::tray::TrayIconBuilder::with_id("glowden")
-                .icon(app.default_window_icon().cloned().expect("app icon"))
+                // The emblem without the app icon's dark tile: trays draw on their own panel.
+                .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?)
                 .tooltip("GlowDen")
                 .menu(&tray_menu(&handle).map_err(|e| e.to_string())?)
                 .on_menu_event(|app, event| match event.id().as_ref() {
