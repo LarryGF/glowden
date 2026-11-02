@@ -6,3 +6,5 @@ tools/voice-probes/probe
 tools/voice-probes/probe_process
 tools/voice-probes/probe_blocks
 tools/voice-probes/bench
+tools/voice-probes/dump_defaults
+tools/voice-probes/field_probe
