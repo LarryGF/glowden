@@ -1,0 +1,93 @@
+name: release-please
+
+# Conventional commits on main open/refresh a release PR; merging it tags a release, and the
+# jobs below build the packages and attach them to that GitHub release. Dispatch with a tag
+# to (re)build and attach the packages of an existing release.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to (re)publish, e.g. v0.2.0. Empty = run release-please."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    if: inputs.tag == '' || inputs.tag == null
+    runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+    steps:
+      # Default GITHUB_TOKEN: tags it creates don't trigger other workflows, so the packages
+      # are built here, off release-please's outputs.
+      - uses: release-please-oss/release-please-action@0a385bebb853de7961b38d9a2d92fcba4eb7a23b # v6.0.3
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  deb:
+    name: Debian/Ubuntu package
+    needs: release-please
+    if: always() && (inputs.tag != '' && inputs.tag != null || needs.release-please.outputs.released == 'true')
+    # The oldest supported base, so the package runs on Ubuntu 22.04+ and Debian 12+.
+    runs-on: ubuntu-22.04
+    env:
+      TAG: ${{ inputs.tag || needs.release-please.outputs.tag }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+      - name: Build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
+            libpipewire-0.3-dev libsystemd-dev libdbus-1-dev libssl-dev pkg-config
+          mkdir -p "$HOME/node"
+          curl -sSfL https://nodejs.org/dist/v22.20.0/node-v22.20.0-linux-x64.tar.xz \
+            | tar -xJ --strip-components=1 -C "$HOME/node"
+          echo "$HOME/node/bin" >> "$GITHUB_PATH"
+      - name: Build
+        run: |
+          npm install -g pnpm@12
+          rustup toolchain install stable --profile minimal
+          packaging/deb/build-inside.sh dist
+      - name: Attach to the release
+        run: gh release upload "$TAG" dist/*.deb --clobber --repo "$GITHUB_REPOSITORY"
+
+  arch:
+    name: Arch package
+    needs: release-please
+    if: always() && (inputs.tag != '' && inputs.tag != null || needs.release-please.outputs.released == 'true')
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    env:
+      TAG: ${{ inputs.tag || needs.release-please.outputs.tag }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Build dependencies
+        run: |
+          pacman -Syu --noconfirm --needed git rust nodejs pnpm webkit2gtk-4.1 gtk3 pipewire \
+            libpulse curl dbus systemd-libs libayatana-appindicator github-cli
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+      - name: Build
+        # makepkg refuses to run as root.
+        run: |
+          useradd -m builder
+          chown -R builder .
+          su builder -c 'cd packaging/arch && makepkg -f --nodeps --noconfirm'
+      - name: Attach to the release
+        run: |
+          pkg=$(ls packaging/arch/glowden-[0-9]*-x86_64.pkg.tar.zst)
+          gh release upload "$TAG" "$pkg" --clobber --repo "$GITHUB_REPOSITORY"
