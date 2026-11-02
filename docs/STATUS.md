@@ -24,10 +24,8 @@ from the packages hasn't been opened yet.
 | `crates/hidpp` | HID++ 2.0 over hidraw, centurion headset transport, decoded device features |
 | `crates/lighting` | Key layout, per-key streaming engine, host effects, audio analyzer, key input |
 | `crates/daemon` | `glowdend`: device workers, persistent config, socket API |
-| `crates/cli` | `glowden` command-line tool and experiments |
-| `crates/voice` | `glowden-voice`: PE loader + PipeWire host running the user's DTS ClearVoice 2 DLL (VO!CE and the voice effect stages), level meter on stdout |
+| `crates/cli` | `glowdenctl` command-line tool and experiments |
 | `crates/sampler` | `glowden-sampler`: ScreenCast portal + PipeWire video → color grid for the screen sampler effect |
-| `tools/voice-probes` | Offline VO!CE engine experiments |
 | `app` | Tauri + Svelte UI, a client of `glowdend` |
 | `packaging` | udev rule, systemd unit, Arch package |
 
@@ -56,6 +54,17 @@ from the packages hasn't been opened yet.
 
 ## Device pictures
 
-Keyboard, mic and headset pictures come from the user's G HUB depots (`glowdenctl import-ghub`);
-the G502 X PLUS ones are encrypted, so it uses Logitech's public product photo, downloaded on
-first use. Neither is copied into this repo. See `adding-devices.md`.
+Keyboard, mic and headset pictures are read in place from the user's G HUB folders
+(`assets.rs`); the G502 X PLUS ones are encrypted, so its definition points at Logitech's
+public product photo, downloaded on first use into `~/.cache/glowden/photos`. Neither is
+copied into this repo.
+
+## Device sources and plugins
+
+Definitions and plugins live in the glowden-devices repo and reach GlowDen as a device
+source (`sources.rs`): `index.json` plus flat files, from a URL or a local folder. The
+built-in source URL (`sources::DEFAULT_SOURCE`) points at
+github.com/glowden/glowden-devices, which doesn't exist yet; until it's published, this
+machine uses a local build of glowden-devices (`dist/`) added as a second source. Blue
+VO!CE runs in that repo's `blue-voice` plugin (JSON lines over stdin/stdout); verified here
+end to end (virtual mic up, levels flowing, pictures and layouts read in place).

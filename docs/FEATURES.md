@@ -87,12 +87,12 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 |---|---|---|
 | Gain, mute | done | Mute state read back from the mic |
 | Lighting | done | |
-| Blue VO!CE 2 engine | built | Real DTS ClearVoice 2 DLL via our PE loader, as a PipeWire virtual mic (`glowden-voice`) |
-| VO!CE presets → engine parameters | done | Every preset field measured (docs/voice.md); the 8 G HUB presets load |
+| Blue VO!CE 2 engine | built | Real DTS ClearVoice 2 DLL via a PE loader, as a PipeWire virtual mic, in the glowden-devices `blue-voice` plugin |
+| VO!CE presets → engine parameters | done | Every preset field measured (glowden-devices: plugins/blue-voice/docs/voice.md); the 8 G HUB presets load |
 | VO!CE as a PipeWire virtual mic | built | "Yeti GX (Blue VO!CE)"; preset picker in the app; not yet heard by the user |
 | Smart lock | built | G HUB's exact bytes sent with VO!CE changes (`00 05 07 00 ae 00 00 02`) |
 | Blue VO!CE automatic gain control, reference gain | partly | Gain on enable and smart-lock bytes as G HUB sends them; AGC itself unidentified |
-| Mic level meter | built | Raw and processed peaks from `glowden-voice` (stdout, every 100 ms) in the VO!CE panel; flags a silent (muted) mic |
+| Mic level meter | built | Raw and processed peaks from the VO!CE plugin (level events every 100 ms) in the VO!CE panel; flags a silent (muted) mic |
 | Blue VO!CE advanced controls | built | Per-stage switches and sliders on top of a preset, applied live |
 | Voice effects (21 presets: delay, flanger/phaser, reverb, ring modulation, pitch/formant voice changer) | built | The DTS effect stages in the ClearVoice 2 DLL, after VO!CE on the virtual mic (also without VO!CE); presets, every G HUB control, preview on the test recording (docs/voice.md). Not yet heard by the user |
 
@@ -128,7 +128,7 @@ G HUB accounts/community/marketplace, game library (`gl`), Windows audio mixing 
 
 ## Device pictures
 
-Imported at runtime with `glowdenctl import-ghub <G HUB depots dir>` into `~/.local/share/glowden/devices/`.
+Read in place from the G HUB folders chosen in Settings (never copied).
 G515, G522 and Yeti GX pictures and LED geometry work (live viewer overlay). The G502 X PLUS
 device pictures in its package are encrypted (G HUB fetches the key online); they are skipped,
 and the mouse shows its unencrypted product card plus a zone strip.
@@ -146,5 +146,5 @@ and the mouse shows its unencrypted product card plus a zone strip.
 | Tray icon with device list and battery | built | Battery per device, profile switching, open/quit; closing the window keeps glowden in the tray |
 | Analytics, accounts, device recommendations | n/a | |
 | G HUB data folders: scan and import | built | Settings page: pictures, LED layouts, VO!CE engine and presets (reads settings.db) |
-| Add a device (starter definition) | built | Settings page writes `~/.local/share/glowden/drivers/<device>.toml` |
-| VO!CE preset test (record, compare presets on one take) | built | `glowden-voice --process` runs presets offline on the recording |
+| Add a device (starter definition) | built | Settings page writes `~/.local/share/glowden/drivers/<device>.toml`; definitions otherwise come from device sources |
+| VO!CE preset test (record, compare presets on one take) | built | the plugin's `process` method runs presets offline on the recording |

@@ -8,6 +8,7 @@ mod config;
 mod drivers;
 mod focus;
 mod keys;
+mod sources;
 mod uinput;
 mod view;
 mod voice;
@@ -41,6 +42,8 @@ struct State {
     focused: Option<String>,
     /// Devices showing the low-battery effect.
     low_battery: std::collections::HashSet<String>,
+    /// Products already looked up in the device sources this run.
+    searched: std::collections::HashSet<u16>,
 }
 
 impl State {
@@ -155,10 +158,13 @@ fn migrate_from_lhub() {
     let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
         return;
     };
-    for dir in [".config", ".local/share", ".local/state"] {
-        let (old, new) = (home.join(dir).join("lhub"), home.join(dir).join("glowden"));
-        if old.is_dir() && !new.exists() && std::fs::rename(&old, &new).is_ok() {
-            eprintln!("moved {} to {}", old.display(), new.display());
+    for dir in [".config", ".local/share", ".local/state", ".cache"] {
+        // The service's own folders, and the app window's (its identifier changed too).
+        for (from, to) in [("lhub", "glowden"), ("dev.lhub.app", "dev.glowden.app")] {
+            let (old, new) = (home.join(dir).join(from), home.join(dir).join(to));
+            if old.is_dir() && !new.exists() && std::fs::rename(&old, &new).is_ok() {
+                eprintln!("moved {} to {}", old.display(), new.display());
+            }
         }
     }
     let config = home.join(".config/glowden/config.json");
@@ -200,6 +206,7 @@ fn main() {
             recent: Vec::new(),
             focused: None,
             low_battery: Default::default(),
+            searched: Default::default(),
         }),
         Condvar::new(),
     ));
@@ -247,6 +254,96 @@ fn main() {
 }
 
 /// Picks up new and reconnected devices and hands each its saved configuration.
+/// Looks for a definition of an unknown device in the device sources and installs it (data
+/// only), then reconnects the device with it. Runs in the background: it may go online.
+fn find_definition(shared: Shared, product: u16, name: String) {
+    std::thread::spawn(move || {
+        let list = shared.0.lock().unwrap().config.sources.clone();
+        for s in &list {
+            let stale = std::fs::metadata(sources::dir(&s.url).join("index.json"))
+                .and_then(|m| m.modified())
+                .map_or(true, |t| {
+                    t.elapsed().unwrap_or_default() > Duration::from_secs(3600)
+                });
+            if stale && let Err(e) = sources::refresh(&s.url) {
+                eprintln!("device source {}: {e}", s.url);
+            }
+        }
+        let Some((url, id)) = sources::find_for_product(&list, product) else {
+            eprintln!("{name} ({product:04x}): no definition in the device sources");
+            return;
+        };
+        match sources::install_device(&url, &id) {
+            Ok(()) => {
+                eprintln!("{name}: installed definition {id} from {url}");
+                app::notify(
+                    "Device added",
+                    &format!("Installed the definition for {name}."),
+                );
+                reload_drivers(&mut shared.0.lock().unwrap(), Some(product));
+            }
+            Err(e) => eprintln!("{name}: installing {id} from {url}: {e}"),
+        }
+    });
+}
+
+/// Reads the definitions again and reconnects the devices they're for (all with `None`), so
+/// those devices pick up the new definition.
+fn reload_drivers(st: &mut State, product: Option<u16>) {
+    st.drivers = drivers::Registry::load();
+    let ids: Vec<String> = st
+        .workers
+        .iter()
+        .filter(|(_, h)| {
+            let p = h.view.lock().unwrap().product.clone();
+            let p = u16::from_str_radix(p.rsplit(':').next().unwrap_or(""), 16).ok();
+            product.is_none() || p == product
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+    for id in ids {
+        st.voice.stop(&id);
+        // Dropping the handle ends the worker; the next scan connects the device again.
+        st.workers.remove(&id);
+    }
+}
+
+/// The device sources with what they offer and what's installed, for Settings.
+fn sources_state(st: &State) -> Value {
+    let list: Vec<Value> = st
+        .config
+        .sources
+        .iter()
+        .map(|s| {
+            let index = sources::cached(&s.url);
+            let devices: Vec<Value> = index
+                .as_ref()
+                .and_then(|i| i["devices"].as_array().cloned())
+                .unwrap_or_default()
+                .into_iter()
+                .map(|d| {
+                    let id = d["id"].as_str().unwrap_or("").to_string();
+                    json!({
+                        "id": id, "name": d["name"], "kind": d["kind"], "plugins": d["plugins"],
+                        "installed": sources::is_installed(&s.url, &id),
+                    })
+                })
+                .collect();
+            json!({
+                "url": s.url,
+                "builtin": s.url == sources::DEFAULT_SOURCE,
+                "trusted": s.trusted,
+                "name": index.as_ref().and_then(|i| i["name"].as_str().map(str::to_string)),
+                "version": index.as_ref().and_then(|i| i["version"].as_str().map(str::to_string)),
+                "fetched": index.is_some(),
+                "devices": devices,
+                "plugins": index.as_ref().map(|i| i["plugins"].clone()).unwrap_or(json!([])),
+            })
+        })
+        .collect();
+    json!(list)
+}
+
 fn manage(shared: Shared) {
     // Nodes that didn't answer, and when; they're only re-probed every 30 s so a switched-off
     // headset doesn't slow down noticing everything else.
@@ -365,7 +462,11 @@ fn manage(shared: Shared) {
             let cfg = st.effective(&f.id);
             eprintln!("{}: {} connected, applying {:?}", f.id, f.name, cfg);
             let id = f.id.clone();
-            let driver = st.drivers.for_product(f.device.info.product).cloned();
+            let product = f.device.info.product;
+            let driver = st.drivers.for_product(product).cloned();
+            if driver.is_none() && st.searched.insert(product) {
+                find_definition(shared.clone(), product, f.name.clone());
+            }
             let voice = cfg.voice.clone().filter(|v| v.active());
             st.workers
                 .insert(id.clone(), worker::spawn(f, cfg, driver.clone()));
@@ -460,6 +561,7 @@ enum Request {
     /// Plays the test recording through a VO!CE preset and/or a voice effect (neither: as
     /// recorded).
     VoiceTestPlay {
+        id: String,
         preset: Option<String>,
         #[serde(default)]
         effect: Option<String>,
@@ -544,6 +646,28 @@ enum Request {
     SetVoiceOverrides {
         id: String,
         overrides: std::collections::BTreeMap<String, Value>,
+    },
+    Sources,
+    /// Fetches every source's index again.
+    RefreshSources,
+    AddSource {
+        url: String,
+    },
+    RemoveSource {
+        url: String,
+    },
+    /// Allows (or stops allowing) a source's plugins to run.
+    TrustSource {
+        url: String,
+        trusted: bool,
+    },
+    InstallDevice {
+        url: String,
+        id: String,
+    },
+    UninstallDevice {
+        url: String,
+        id: String,
     },
     SetVoiceEffect {
         id: String,
@@ -631,7 +755,7 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
                 voice_def(&lock.lock().unwrap(), &id).ok_or("this device has no Blue VO!CE")?;
             voice::record_test(&def, seconds).map(|_| Value::Null)
         }
-        Request::VoiceTestPlay { preset, effect } => {
+        Request::VoiceTestPlay { id, preset, effect } => {
             let find = |list: Vec<(String, Value)>,
                         name: Option<String>|
              -> Result<Option<Value>, String> {
@@ -646,10 +770,13 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
             };
             let settings = find(voice::presets(), preset)?;
             let effects = find(voice::effect_presets(), effect)?;
-            let args = (settings.is_some() || effects.is_some())
-                .then(|| voice::host_args(settings.as_ref(), effects.as_ref()));
             let mut st = lock.lock().unwrap();
-            st.voice.play_test(args).map(|_| Value::Null)
+            let processed = if settings.is_some() || effects.is_some() {
+                Some((voice_plugin(&st, &id)?, settings, effects))
+            } else {
+                None
+            };
+            st.voice.play_test(processed).map(|_| Value::Null)
         }
         Request::VoiceLevels { id } => Ok(match lock.lock().unwrap().voice.levels(&id) {
             Some((input, output)) => json!({ "input": input, "output": output }),
@@ -849,6 +976,68 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
             Ok(app_settings(&st))
         }
         Request::SetAutostart { on } => app::set_autostart(on).map(|_| json!(app::autostart())),
+        Request::Sources => Ok(sources_state(&lock.lock().unwrap())),
+        Request::RefreshSources => {
+            let list = lock.lock().unwrap().config.sources.clone();
+            let errors: Vec<String> = list
+                .iter()
+                .filter_map(|s| {
+                    sources::refresh(&s.url)
+                        .err()
+                        .map(|e| format!("{}: {e}", s.url))
+                })
+                .collect();
+            let mut st = lock.lock().unwrap();
+            st.searched.clear();
+            let mut state = sources_state(&st);
+            state = json!({ "sources": state, "errors": errors });
+            Ok(state)
+        }
+        Request::AddSource { url } => {
+            let url = url.trim().to_string();
+            sources::refresh(&url)?;
+            let mut st = lock.lock().unwrap();
+            if !st.config.sources.iter().any(|s| s.url == url) {
+                st.config.sources.push(config::SourceConfig {
+                    url,
+                    trusted: false,
+                });
+                st.config.save();
+            }
+            st.searched.clear();
+            Ok(sources_state(&st))
+        }
+        Request::RemoveSource { url } => {
+            if url == sources::DEFAULT_SOURCE {
+                return Err("GlowDen's own source can't be removed".into());
+            }
+            let mut st = lock.lock().unwrap();
+            st.config.sources.retain(|s| s.url != url);
+            st.config.save();
+            let _ = std::fs::remove_dir_all(sources::dir(&url));
+            reload_drivers(&mut st, None);
+            Ok(sources_state(&st))
+        }
+        Request::TrustSource { url, trusted } => {
+            let mut st = lock.lock().unwrap();
+            for s in st.config.sources.iter_mut().filter(|s| s.url == url) {
+                s.trusted = trusted;
+            }
+            st.config.save();
+            Ok(sources_state(&st))
+        }
+        Request::InstallDevice { url, id } => {
+            sources::install_device(&url, &id)?;
+            let mut st = lock.lock().unwrap();
+            reload_drivers(&mut st, None);
+            Ok(sources_state(&st))
+        }
+        Request::UninstallDevice { url, id } => {
+            sources::uninstall_device(&url, &id)?;
+            let mut st = lock.lock().unwrap();
+            reload_drivers(&mut st, None);
+            Ok(sources_state(&st))
+        }
         Request::ScanGhub { rescan } => {
             let st = lock.lock().unwrap();
             assets::set_roots(&st.config.app.ghub_paths);
@@ -1061,10 +1250,39 @@ fn sync_lighting(shared: &Shared, from: &str) -> Result<Value, String> {
     Ok(json!(synced))
 }
 
-fn voice_def(st: &State, id: &str) -> Option<drivers::VoiceDef> {
+fn driver_of(st: &State, id: &str) -> Option<drivers::Driver> {
     let product = st.workers.get(id)?.view.lock().unwrap().product.clone();
     let product = u16::from_str_radix(product.rsplit(':').next()?, 16).ok()?;
-    st.drivers.for_product(product)?.voice.clone()
+    st.drivers.for_product(product).cloned()
+}
+
+fn voice_def(st: &State, id: &str) -> Option<drivers::VoiceDef> {
+    driver_of(st, id)?.voice
+}
+
+/// The device's VO!CE plugin program: from the source its definition came from, or, for a
+/// definition of the user's own, from any trusted source that has it.
+fn voice_plugin(st: &State, id: &str) -> Result<PathBuf, String> {
+    let driver = driver_of(st, id).ok_or("unknown device")?;
+    let def = driver
+        .voice
+        .as_ref()
+        .ok_or("this device has no Blue VO!CE")?;
+    match sources::source_of(&driver.dir, &st.config.sources) {
+        Some(source) => sources::plugin(&source, &def.plugin),
+        None => st
+            .config
+            .sources
+            .iter()
+            .filter(|s| s.trusted)
+            .find_map(|s| sources::plugin(s, &def.plugin).ok())
+            .ok_or_else(|| {
+                format!(
+                    "no trusted device source provides the {} plugin",
+                    def.plugin
+                )
+            }),
+    }
 }
 
 /// Starts the virtual microphone with the configured preset (the first one by default).
@@ -1091,8 +1309,14 @@ fn effect_settings(cfg: &VoiceConfig) -> Option<Value> {
 
 fn start_voice(st: &mut State, id: &str, def: &drivers::VoiceDef, cfg: &VoiceConfig) {
     let settings = cfg.enabled.then(|| voice_settings(cfg));
-    let args = voice::host_args(settings.as_ref(), effect_settings(cfg).as_ref());
-    st.voice.apply(id, def, &args);
+    let plugin = voice_plugin(st, id);
+    st.voice.apply(
+        id,
+        def,
+        plugin,
+        settings.as_ref(),
+        effect_settings(cfg).as_ref(),
+    );
 }
 
 /// Changes the voice effect part of a device's VO!CE config and applies it.
@@ -1140,11 +1364,12 @@ fn voice_state(st: &mut State, id: &str) -> Value {
     let (running, error) = st.voice.status(id);
     let all = voice::presets();
     let presets: Vec<String> = all.iter().map(|(n, _)| n.clone()).collect();
-    let details: serde_json::Map<String, Value> = all
-        .iter()
-        .map(|(n, s)| (n.clone(), voice::summary(s)))
-        .collect();
+    // Controls and preset summaries come from the plugin; without it, VO!CE can't run.
+    let plugin = voice_plugin(st, id).and_then(|b| voice::describe(&b, &all));
+    let plugin_error = plugin.as_ref().err().cloned();
+    let (info, details) = plugin.unwrap_or_default();
     json!({
+        "plugin_error": plugin_error,
         "details": details,
         "has_test": voice::has_test(),
         "supported": voice_def(st, id).is_some(),
@@ -1154,19 +1379,13 @@ fn voice_state(st: &mut State, id: &str) -> Value {
         "default_mic": cfg.default_mic,
         "settings": voice_settings(&cfg),
         "overrides": cfg.overrides,
-        "controls": voice::CONTROLS.iter().map(|(path, group, label, min, max, step, unit)| {
-            json!({ "path": path, "group": group, "label": label, "min": min, "max": max, "step": step, "unit": unit })
-        }).collect::<Vec<_>>(),
-        "switches": voice::SWITCHES.iter().map(|(group, path)| json!({ "group": group, "path": path })).collect::<Vec<_>>(),
+        "controls": if info["controls"].is_array() { info["controls"].clone() } else { json!([]) },
+        "switches": if info["switches"].is_array() { info["switches"].clone() } else { json!([]) },
         "effects": voice::effect_presets().into_iter().map(|(n, s)| json!({ "name": n, "settings": s })).collect::<Vec<_>>(),
         "effect": cfg.effect.clone().unwrap_or_else(|| "Off".into()),
         "effect_settings": effect_settings(&cfg),
         "effect_overrides": cfg.effect_overrides,
-        "effect_modes": {
-            "vocalMode": voice::VOCAL_MODES, "phaserMode": voice::PHASER_MODES, "shapeMode": voice::SHAPE_MODES,
-            "reflectionMode": voice::REFLECTION_MODES, "inputMode": voice::INPUT_MODES,
-            "feedbackMode": voice::FEEDBACK_MODES, "feedbackTimbre": voice::FEEDBACK_TIMBRES,
-        },
+        "effect_modes": if info["effect_modes"].is_object() { info["effect_modes"].clone() } else { json!({}) },
         "preset": cfg.preset.or_else(|| presets.first().cloned()),
         "running": running,
         "error": error,
@@ -1219,10 +1438,11 @@ fn set_voice(shared: &Shared, id: &str, cfg: VoiceConfig) -> Result<Value, Strin
             .flatten()
             .map(|g| (g * 100.0).round().clamp(0.0, 100.0) as u8);
         let notify = cfg.enabled && (changed || !was_on);
-        (notify.then_some(gain), voice_state(&mut st, id))
+        let requests = def.on_enable_requests()?;
+        (notify.then_some((gain, requests)), voice_state(&mut st, id))
     };
-    if let Some(gain) = gain {
-        ask(shared, id, |tx| Cmd::VoiceApplied(gain, tx))?;
+    if let Some((gain, requests)) = gain {
+        ask(shared, id, |tx| Cmd::VoiceApplied(gain, requests, tx))?;
     }
     Ok(state)
 }

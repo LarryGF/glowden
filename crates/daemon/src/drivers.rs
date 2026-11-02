@@ -2,10 +2,10 @@
 //!
 //! Standard features (RGB effects, per-key lighting, DPI, report rate, battery, mic) work for
 //! any device that reports them. A definition file adds the rest: kind, picture model,
-//! key layout, reactive input and firmware-only effects. See docs/adding-devices.md.
+//! key layout, reactive input and firmware-only effects. See ADDING-DEVICES.md in glowden-devices.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use serde::Deserialize;
 
@@ -72,13 +72,43 @@ pub struct ButtonDef {
     pub label: String,
 }
 
-/// Blue VO!CE for this device: which PipeWire source the engine processes.
+/// Blue VO!CE for this device: the plugin that runs it and which PipeWire source it processes.
 #[derive(Deserialize, Clone, Debug)]
 pub struct VoiceDef {
+    /// Plugin id in the definition's source.
+    pub plugin: String,
     /// Part of the PipeWire node name of the device's microphone.
     pub source: String,
     /// Name the virtual microphone gets in sound settings.
     pub description: String,
+    /// HID++ requests sent when VO!CE is switched on or its preset changes, as
+    /// "feature:function:params" in hex (e.g. "8370:3:0005070000ae000002").
+    #[serde(default)]
+    pub on_enable: Vec<String>,
+}
+
+impl VoiceDef {
+    pub fn on_enable_requests(&self) -> Result<Vec<(u16, u8, Vec<u8>)>, String> {
+        self.on_enable
+            .iter()
+            .map(|r| {
+                let bad = || format!("bad on_enable request {r}");
+                let mut it = r.split(':');
+                let feature =
+                    u16::from_str_radix(it.next().ok_or_else(bad)?, 16).map_err(|_| bad())?;
+                let function =
+                    u8::from_str_radix(it.next().ok_or_else(bad)?, 16).map_err(|_| bad())?;
+                let hex = it.next().unwrap_or("");
+                if hex.len() % 2 != 0 || it.next().is_some() {
+                    return Err(bad());
+                }
+                let params = (0..hex.len() / 2)
+                    .map(|i| u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).map_err(|_| bad()))
+                    .collect::<Result<Vec<u8>, String>>()?;
+                Ok((feature, function, params))
+            })
+            .collect()
+    }
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
@@ -130,15 +160,10 @@ impl FirmwareEffect {
 }
 
 /// Where definitions are read from, lowest priority first. Later files override earlier ones
-/// for the same product, so a user file can patch a shipped definition.
+/// for the same product, so a user file can patch an installed definition.
 fn search_path() -> Vec<PathBuf> {
-    let mut dirs = vec![PathBuf::from("/usr/share/glowden/drivers")];
-    // Development builds: <repo>/target/<profile>/glowdend → <repo>/drivers.
-    if let Ok(exe) = std::env::current_exe()
-        && let Some(repo) = exe.parent().and_then(Path::parent).and_then(Path::parent)
-    {
-        dirs.push(repo.join("drivers"));
-    }
+    // Definitions installed from device sources, one folder each.
+    let mut dirs = crate::sources::installed_device_dirs();
     if let Some(home) = std::env::var_os("HOME") {
         dirs.push(PathBuf::from(home).join(".local/share/glowden/drivers"));
     }
@@ -222,7 +247,7 @@ pub fn create_starter(name: &str, kind: &str, product: u16) -> Result<PathBuf, S
     }
     let model = slug.replace('-', "_");
     let text = format!(
-        "# Starter definition written by glowden. See docs/adding-devices.md for pictures, LED\n\
+        "# Starter definition written by glowden. See ADDING-DEVICES.md in glowden-devices for pictures, LED\n\
          # positions, host-handled buttons and firmware effects.\n\
          name = \"{name}\"\n\
          kind = \"{kind}\"\n\

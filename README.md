@@ -6,7 +6,7 @@ No Wine.
 
 GlowDen is a framework. It ships its own code and device definitions (protocol facts); you
 bring the assets. Pictures, sound clips, VO!CE presets and the optional Blue VO!CE engine
-are imported at runtime from your own G HUB copy (`glowdenctl import-ghub`), and nothing from
+are read at runtime from G HUB folders you choose (Settings → G HUB files), and nothing from
 Logitech or DTS is part of this repo or its packages. GlowDen is not affiliated with Logitech;
 see [`NOTICE.md`](NOTICE.md).
 
@@ -28,11 +28,11 @@ Requires the Rust toolchain (pinned by `rust-toolchain.toml`), Node with pnpm, a
 WebKitGTK 4.1, GTK 3, PipeWire, libsystemd and D-Bus development packages.
 
 ```sh
-cargo build --release -p glowdend -p glowden-cli -p glowden-voice -p glowden-sampler
+cargo build --release -p glowdend -p glowden-cli -p glowden-sampler
 cd app && pnpm install && pnpm tauri build   # desktop app (after the cargo build)
 ```
 
-Binaries land in `target/release/`: `glowden` (app), `glowdend`, `glowdenctl`, `glowden-voice` (VO!CE host),
+Binaries land in `target/release/`: `glowden` (app), `glowdend`, `glowdenctl` and
 `glowden-sampler` (screen sampler).
 
 ## Install
@@ -68,22 +68,24 @@ starts it when it isn't running).
 - `glowdenctl` is a CLI for inspection and experiments: `glowdenctl list`, `glowdenctl <device> effects`,
   `GLOWDEN_DEBUG=1 glowdenctl …` prints every HID++ frame.
 
-### Device pictures
+### Devices and plugins
 
-G HUB downloads per-device resource packages (pictures, LED geometry). To show them, point
-the importer at a G HUB `depots` folder you have access to (for example copied from
-`C:\ProgramData\LGHUB\depots`):
+What GlowDen knows about each device (kind, key layout, LED regions, buttons, firmware
+effects) comes from device sources: GlowDen's own
+([glowden-devices](https://github.com/glowden/glowden-devices)) is always listed, and you can
+add others in Settings → Device sources. A device that connects without a definition is
+looked up there automatically, and you can install or remove definitions one by one.
 
-```sh
-glowdenctl import-ghub /path/to/LGHUB/depots
-```
+Some devices need code as well, shipped by the source as a plugin (Blue VO!CE on the Yeti
+GX is one). Plugins are programs, so they run only after you allow that source's plugins.
 
-Files go to `~/.local/share/glowden/devices/<model>/` and stay on your machine. Encrypted
-assets are skipped.
+### G HUB files
 
-### Blue VO!CE
-
-See [`docs/voice.md`](docs/voice.md). The engine DLL comes from your own G HUB install.
+Device pictures, LED geometry, sound clips, the Blue VO!CE presets and its engine come from
+a G HUB installation you have, for example on a dual-boot Windows drive: mount it and add
+the drive (or any folder with the files) in Settings → G HUB files. GlowDen reads the files
+where they are and never copies them; what you point it at, and under which terms you got
+it, is your responsibility. Encrypted files are skipped.
 
 ## Layout
 
@@ -93,10 +95,8 @@ See [`docs/voice.md`](docs/voice.md). The engine DLL comes from your own G HUB i
 | `crates/lighting` | Key layout, per-key streaming, effects, audio analyzer, key input |
 | `crates/daemon` | `glowdend`: per-device workers, persistent config, Unix socket API |
 | `crates/cli` | `glowdenctl` CLI |
-| `crates/voice/loader` | PE loader that runs the Blue VO!CE 2 DLL natively |
 | `app` | Tauri + Svelte desktop app (client of `glowdend`) |
 | `packaging` | udev rule, systemd unit, Arch package |
-| `tools/voice-probes` | Offline experiments against the VO!CE engine |
 | `docs` | Feature inventory, status, protocol notes |
 
 ## License

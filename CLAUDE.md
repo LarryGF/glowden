@@ -41,8 +41,11 @@ track what is done, verified, and next.
 
 ## Logitech material
 
-- Do not commit Logitech binaries, pictures, presets or data files. Pictures and LED
-  geometry are imported at runtime (`glowdenctl import-ghub`); the VO!CE DLL is the user's own copy.
+- Do not commit Logitech binaries, pictures, presets or data files. Pictures, LED geometry,
+  sounds, presets and the VO!CE DLL are read in place from folders the user chooses
+  (`crates/daemon/src/assets.rs`); never copy them.
+- Device definitions and plugins live in the separate glowden-devices repo (device
+  sources, `crates/daemon/src/sources.rs`); nothing device-specific goes in this repo.
 - Do not decrypt protected assets.
 - Original effects and presets only: generic effect types are fine, Logitech's named
   keyframe animations are not to be transcribed.

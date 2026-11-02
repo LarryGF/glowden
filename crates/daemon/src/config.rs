@@ -245,6 +245,18 @@ pub struct Config {
     /// Lighting saved by the user to reuse on any device.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub lighting_presets: Vec<LightingPreset>,
+    /// Where device definitions and plugins come from; GlowDen's own source is always first.
+    #[serde(default)]
+    pub sources: Vec<SourceConfig>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct SourceConfig {
+    /// URL of the source's index.json, or a local folder holding one.
+    pub url: String,
+    /// The user allowed this source's plugins (programs) to run.
+    #[serde(default)]
+    pub trusted: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -358,13 +370,27 @@ pub fn path() -> PathBuf {
 
 impl Config {
     pub fn load() -> Config {
-        match std::fs::read(path()) {
+        let mut cfg = match std::fs::read(path()) {
             Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_else(|e| {
                 eprintln!("config: ignoring unreadable {}: {e}", path().display());
                 Config::default()
             }),
             Err(_) => Config::default(),
+        };
+        if !cfg
+            .sources
+            .iter()
+            .any(|s| s.url == crate::sources::DEFAULT_SOURCE)
+        {
+            cfg.sources.insert(
+                0,
+                SourceConfig {
+                    url: crate::sources::DEFAULT_SOURCE.into(),
+                    trusted: false,
+                },
+            );
         }
+        cfg
     }
 
     /// Writes atomically so a crash mid-write can't leave a truncated file.

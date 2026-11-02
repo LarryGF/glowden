@@ -2,14 +2,6 @@
 node_modules/
 dist/
 app/src-tauri/gen/
-tools/voice-probes/probe
-tools/voice-probes/probe_process
-tools/voice-probes/probe_blocks
-tools/voice-probes/bench
-tools/voice-probes/dump_defaults
-tools/voice-probes/field_probe
-tools/voice-probes/probe_effects
-tools/voice-probes/stage_probe
 /dist
 /packaging/arch/src/
 /packaging/arch/pkg/

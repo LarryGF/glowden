@@ -34,9 +34,7 @@
         "files": {
           "/usr/bin/glowdend": "../../target/release/glowdend",
           "/usr/bin/glowdenctl": "../../target/release/glowdenctl",
-          "/usr/bin/glowden-voice": "../../target/release/glowden-voice",
           "/usr/bin/glowden-sampler": "../../target/release/glowden-sampler",
-          "/usr/share/glowden/drivers": "../../drivers",
           "/usr/lib/udev/rules.d/70-glowden.rules": "../../packaging/udev/70-glowden.rules",
           "/usr/lib/systemd/user/glowdend.service": "../../packaging/systemd/glowdend.service",
           "/usr/share/icons/hicolor/256x256/apps/glowden.png": "icons/icon.png",

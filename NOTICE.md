@@ -16,15 +16,16 @@ GlowDen is its own code under the MIT or Apache-2.0 license (`LICENSE-MIT`, `LIC
 It talks to devices over their USB and HID++ interfaces, which were worked out from the
 devices themselves and from captures of their traffic, for interoperability.
 
-It ships no Logitech or DTS software, firmware, pictures, sounds or presets. Device
-definitions (`drivers/*.toml`) describe protocol facts: product ids, feature numbers and
-parameter layouts.
+It ships no Logitech or DTS software, firmware, pictures, sounds or presets, and no device
+definitions: those come from device sources (GlowDen's own is glowden-devices), and
+describe protocol facts such as product ids, feature numbers and parameter layouts.
 
-Users can bring their own assets. With `glowdenctl import-ghub`, GlowDen reads files from the user's
-own copy of G HUB on the user's own machine: device pictures, sound clips, VO!CE presets
-and the Blue VO!CE audio engine. Those files stay under their owners' licenses. Whether
-you may use them this way depends on the terms you accepted for that software. GlowDen never
-decrypts protected files.
+Users bring their own assets. GlowDen reads files from folders the user chooses, such as
+the user's own G HUB installation on a dual-boot drive: device pictures, sound clips, VO!CE
+presets and the Blue VO!CE audio engine. It reads them in place and never copies them.
+Those files stay under their owners' licenses; whether you may use them this way depends on
+the terms you accepted for that software, and what you point GlowDen at is your
+responsibility. GlowDen never decrypts protected files.
 
 ## Third-party components
 

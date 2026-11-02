@@ -28,7 +28,7 @@ pub enum Cmd {
     SetMuted(bool, Reply),
     GetMuted(Reply),
     /// Blue VO!CE switched on or its preset changed: what G HUB sends the mic then.
-    VoiceApplied(Option<u8>, Reply),
+    VoiceApplied(Option<u8>, Vec<(u16, u8, Vec<u8>)>, Reply),
     Release(Reply),
     MouseInfo(Reply),
 }
@@ -244,12 +244,16 @@ fn handle(
         Cmd::SetGain(g, tx) => reply(tx, mic::set_gain(dev, g).map(|_| Value::Null)),
         Cmd::SetMuted(m, tx) => reply(tx, mic::set_muted(dev, m).map(|_| Value::Null)),
         Cmd::GetMuted(tx) => reply(tx, mic::muted(dev).map(|m| json!(m))),
-        Cmd::VoiceApplied(gain, tx) => {
+        Cmd::VoiceApplied(gain, requests, tx) => {
             let r = (|| {
                 if let Some(g) = gain {
                     mic::set_gain(dev, g)?;
                 }
-                mic::apply_voice_lock(dev)
+                // The definition's extra requests (Yeti GX: G HUB's smart-lock setting).
+                for (feature, function, params) in &requests {
+                    dev.call(*feature, *function, params)?;
+                }
+                Ok(())
             })();
             reply(tx, r.map(|_| Value::Null))
         }

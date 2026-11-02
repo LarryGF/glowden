@@ -1,13 +1,41 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { api, type AppInfo, type GhubSummary } from "./api";
+  import { api, type AppInfo, type GhubSummary, type Source } from "./api";
 
   let { onerror, onchanged }: { onerror: (e: unknown) => void; onchanged: () => void } = $props();
 
   let info = $state<AppInfo | null>(null);
   let report = $state("");
   let found = $state<GhubSummary | null>(null);
+  let sources = $state<Source[]>([]);
+  let newSource = $state("");
+  let sourceErrors = $state<string[]>([]);
+
+  async function sourcesDo(p: Promise<Source[]>, after?: () => void) {
+    try {
+      sources = await p;
+      after?.();
+      onchanged();
+    } catch (e) {
+      onerror(e);
+    }
+  }
+  async function refreshSources() {
+    busy = "sources";
+    try {
+      const r = await api.refreshSources();
+      sources = r.sources;
+      sourceErrors = r.errors;
+    } catch (e) {
+      onerror(e);
+    }
+    busy = "";
+  }
+  function trust(s: Source) {
+    if (!s.trusted && !confirm(`Allow plugins from ${s.name ?? s.url}?\n\nPlugins are programs. They run on this computer with your user's rights, for devices that need them (e.g. Blue VO!CE). Only allow sources you trust.`)) return;
+    sourcesDo(api.trustSource(s.url, !s.trusted));
+  }
   let busy = $state("");
   let backups = $state<string[]>([]);
   const when = (name: string) => new Date(Number(name) * 1000).toLocaleString();
@@ -30,6 +58,10 @@
     load();
     backup(api.backups());
     api.scanGhub(false).then((s) => (found = s)).catch(() => {});
+    api.sources().then((s) => {
+      sources = s;
+      if (s.some((x) => !x.fetched)) refreshSources();
+    }).catch(() => {});
   });
 
   async function save(change: (s: AppInfo["settings"]) => void) {
@@ -65,7 +97,7 @@
     busy = id;
     try {
       const file = await api.createDriver(id);
-      report = `Created ${file}. Edit it to add pictures, LEDs and buttons (docs/adding-devices.md).`;
+      report = `Created ${file}. Edit it to add pictures, LEDs and buttons (ADDING-DEVICES.md in glowden-devices).`;
       setTimeout(() => {
         load();
         onchanged();
@@ -126,6 +158,67 @@
     </section>
 
     <section class="card">
+      <div class="head">
+        <h2>Device sources</h2>
+        <button onclick={refreshSources} disabled={!!busy}>{busy === "sources" ? "Checking…" : "Check for updates"}</button>
+      </div>
+      <p class="note">
+        Device definitions (what GlowDen knows about each device) come from these sources;
+        a device that connects without one is looked up here automatically. Definitions are
+        data. Some devices also need a plugin (a program, e.g. for Blue VO!CE), which runs
+        only once you allow that source's plugins.
+      </p>
+      {#each sources as s (s.url)}
+        <div class="source">
+          <div class="source-head">
+            <div>
+              <strong>{s.name ?? s.url}</strong>
+              {#if s.builtin}<span class="badge">built in</span>{/if}
+              {#if s.version}<span class="dim">v{s.version}</span>{/if}
+              <div class="dim url">{s.url}</div>
+              {#if !s.fetched}<div class="dim">Not reachable yet.</div>{/if}
+            </div>
+            <div class="actions">
+              {#if s.plugins.length}
+                <button class="switch small" class:on={s.trusted} onclick={() => trust(s)} title="Let this source's plugins run">
+                  {s.trusted ? "Plugins allowed" : "Allow plugins"}
+                </button>
+              {/if}
+              {#if !s.builtin}
+                <button class="ghost" onclick={() => confirm(`Remove ${s.name ?? s.url} and its installed definitions?`) && sourcesDo(api.removeSource(s.url))}>Remove</button>
+              {/if}
+            </div>
+          </div>
+          {#if s.devices.length}
+            <table>
+              <tbody>
+                {#each s.devices as d (d.id)}
+                  <tr>
+                    <td>{d.name}{#if d.plugins.length}<span class="dim"> · plugin: {d.plugins.join(", ")}</span>{/if}</td>
+                    <td class="kind">{d.kind ?? ""}</td>
+                    <td class="act">
+                      {#if d.installed}
+                        <button class="ghost" onclick={() => sourcesDo(api.uninstallDevice(s.url, d.id))}>Remove</button>
+                      {:else}
+                        <button onclick={() => sourcesDo(api.installDevice(s.url, d.id))}>Install</button>
+                      {/if}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          {/if}
+        </div>
+      {/each}
+      {#each sourceErrors as e}<p class="warn">{e}</p>{/each}
+      <div class="add">
+        <input placeholder="https://…/index.json or a local folder" bind:value={newSource}
+          onkeydown={(e) => e.key === "Enter" && newSource.trim() && sourcesDo(api.addSource(newSource.trim()), () => (newSource = ""))} />
+        <button disabled={!newSource.trim()} onclick={() => sourcesDo(api.addSource(newSource.trim()), () => (newSource = ""))}>Add source</button>
+      </div>
+    </section>
+
+    <section class="card">
       <h2>Devices</h2>
       <p class="note">
         Each device works with what it reports over HID++; a definition file adds its picture,
@@ -157,9 +250,9 @@
           {/each}
         </ul>
         <p class="note">
-          Definitions are read from <code>/usr/share/glowden/drivers</code>, the repo's
-          <code>drivers/</code> and <code>~/.local/share/glowden/drivers</code> (yours win). Restart the
-          service after editing one.
+          Definitions come from the device sources above, plus your own in
+          <code>~/.local/share/glowden/drivers</code> (yours win). Restart the service after
+          editing one.
         </p>
       </details>
     </section>
@@ -223,6 +316,16 @@
 
 <style>
   .page { height: 100%; overflow: auto; padding: 28px 40px; display: flex; flex-direction: column; gap: 20px; max-width: 980px; margin: 0 auto; }
+  .head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .source { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 10px; background: var(--bg); }
+  .source-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+  .source .actions { display: flex; gap: 6px; align-items: center; }
+  .badge { font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; margin-left: 6px; }
+  .dim { color: var(--text-faint); font-size: 12px; }
+  .url { font-family: monospace; font-size: 11px; word-break: break-all; }
+  .source td.kind { color: var(--text-faint); font-size: 12px; }
+  .source td.act { text-align: right; }
+  .warn { margin: 0; color: var(--warn); font-size: 12px; }
   .found { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-faint); }
   .found .ok { color: var(--text); }
   .card { background: var(--bg-card); border-radius: 14px; padding: 22px 26px; display: flex; flex-direction: column; gap: 14px; }

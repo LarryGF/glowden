@@ -108,7 +108,7 @@
 
   async function play(preset: string | null, effect: string | null = null) {
     try {
-      await api.voiceTestPlay(preset, effect);
+      await api.voiceTestPlay(device.id, preset, effect);
       playing = effect ? `${preset ?? ""}+${effect}` : (preset ?? "original");
     } catch (e) {
       onerror(e);
@@ -134,14 +134,19 @@
       >
     </div>
 
+    {#if state.plugin_error}
+      <p class="status">{state.plugin_error}</p>
+    {/if}
     {#if !state.engine}
       <p class="note">
-        The VO!CE engine comes from your own G HUB download. Import it with
-        <code>glowdenctl import-ghub &lt;G HUB depots folder&gt;</code>.
+        The VO!CE engine comes from your own G HUB installation: add the folder holding it in
+        Settings → G HUB files (on a dual-boot Windows drive it's in
+        <code>Windows\System32\DriverStore</code> once G HUB's audio driver is installed).
       </p>
     {:else if state.presets.length === 0}
       <p class="note">
-        Import the presets from G HUB's settings with <code>glowdenctl import-voice-presets settings.json</code>.
+        The presets come from G HUB's settings (<code>settings.db</code> in
+        <code>%LOCALAPPDATA%\LGHUB</code>): add that folder in Settings → G HUB files.
       </p>
     {:else}
       <section>

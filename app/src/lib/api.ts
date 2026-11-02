@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export type VoiceState = {
+  plugin_error: string | null;
   supported: boolean;
   engine: boolean;
   presets: string[];
@@ -33,6 +34,17 @@ export type VoiceState = {
 
 /** G HUB's voice effect settings: stage → field → value. */
 export type EffectSettings = Record<string, Record<string, number | boolean | string>>;
+
+export type Source = {
+  url: string;
+  builtin: boolean;
+  trusted: boolean;
+  name: string | null;
+  version: string | null;
+  fetched: boolean;
+  devices: { id: string; name: string; kind: string | null; plugins: string[]; installed: boolean }[];
+  plugins: { id: string; name: string; description: string }[];
+};
 
 export type GhubSummary = {
   devices: { name: string; found: boolean }[];
@@ -164,8 +176,8 @@ export const api = {
     request<VoiceState>({ cmd: "set_voice_overrides", id, overrides }),
   getMuted: (id: string) => request<boolean>({ cmd: "get_muted", id }),
   voiceTestRecord: (id: string, seconds: number) => request<void>({ cmd: "voice_test_record", id, seconds }),
-  voiceTestPlay: (preset: string | null, effect: string | null = null) =>
-    request<void>({ cmd: "voice_test_play", preset, effect }),
+  voiceTestPlay: (id: string, preset: string | null, effect: string | null = null) =>
+    request<void>({ cmd: "voice_test_play", id, preset, effect }),
   setVoiceEffect: (id: string, effect: string | null) => request<VoiceState>({ cmd: "set_voice_effect", id, effect }),
   setVoiceEffectOverrides: (id: string, overrides: Record<string, number | boolean | string>) =>
     request<VoiceState>({ cmd: "set_voice_effect_overrides", id, overrides }),
@@ -197,6 +209,13 @@ export const api = {
     request<void>({ cmd: "set_assignment", id, button, action }),
   setAppSettings: (settings: AppInfo["settings"]) => request<AppInfo>({ cmd: "set_app_settings", settings }),
   setAutostart: (on: boolean) => request<boolean>({ cmd: "set_autostart", on }),
+  sources: () => request<Source[]>({ cmd: "sources" }),
+  refreshSources: () => request<{ sources: Source[]; errors: string[] }>({ cmd: "refresh_sources" }),
+  addSource: (url: string) => request<Source[]>({ cmd: "add_source", url }),
+  removeSource: (url: string) => request<Source[]>({ cmd: "remove_source", url }),
+  trustSource: (url: string, trusted: boolean) => request<Source[]>({ cmd: "trust_source", url, trusted }),
+  installDevice: (url: string, id: string) => request<Source[]>({ cmd: "install_device", url, id }),
+  uninstallDevice: (url: string, id: string) => request<Source[]>({ cmd: "uninstall_device", url, id }),
   scanGhub: (rescan = true) => request<GhubSummary>({ cmd: "scan_ghub", rescan }),
   createDriver: (id: string) => request<string>({ cmd: "create_driver", id }),
   getConfig: (id: string) => request<DeviceConfig>({ cmd: "get_config", id }),

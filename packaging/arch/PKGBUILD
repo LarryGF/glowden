@@ -20,7 +20,7 @@ build() {
   pnpm install --frozen-lockfile
   pnpm tauri build
   cd ..
-  cargo build --release -p glowden-cli -p glowdend -p glowden-voice -p glowden-sampler
+  cargo build --release -p glowden-cli -p glowdend -p glowden-sampler
 }
 
 package() {
@@ -28,10 +28,7 @@ package() {
   install -Dm755 "$root/target/release/glowden" "$pkgdir/usr/bin/glowden"
   install -Dm755 "$root/target/release/glowdenctl" "$pkgdir/usr/bin/glowdenctl"
   install -Dm755 "$root/target/release/glowdend" "$pkgdir/usr/bin/glowdend"
-  install -Dm755 "$root/target/release/glowden-voice" "$pkgdir/usr/bin/glowden-voice"
   install -Dm755 "$root/target/release/glowden-sampler" "$pkgdir/usr/bin/glowden-sampler"
-  install -Dm644 -t "$pkgdir/usr/share/glowden/drivers" "$root"/drivers/*.toml
-  install -Dm644 -t "$pkgdir/usr/share/glowden/drivers/pictures" "$root"/drivers/pictures/*
   install -Dm644 "$root/packaging/udev/70-glowden.rules" "$pkgdir/usr/lib/udev/rules.d/70-glowden.rules"
   install -Dm644 "$root/packaging/systemd/glowdend.service" "$pkgdir/usr/lib/systemd/user/glowdend.service"
   install -Dm644 "$root/packaging/linux/glowden.desktop" "$pkgdir/usr/share/applications/glowden.desktop"
@@ -39,3 +36,4 @@ package() {
   install -Dm644 -t "$pkgdir/usr/share/licenses/$pkgname" "$root/LICENSE-MIT" "$root/LICENSE-APACHE"
   install -Dm644 -t "$pkgdir/usr/share/doc/$pkgname" "$root/README.md" "$root/NOTICE.md"
 }
+

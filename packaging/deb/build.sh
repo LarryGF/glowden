@@ -12,7 +12,7 @@ git -C "$root" archive --format=tar HEAD | docker run --rm -i \
     set -euo pipefail
     tar -x -C /build
     cd /build
-    cargo build --release --locked -p glowdend -p glowden-cli -p glowden-voice -p glowden-sampler
+    cargo build --release --locked -p glowdend -p glowden-cli -p glowden-sampler
     cd app
     pnpm install --frozen-lockfile
     pnpm tauri build --bundles deb --config ../packaging/deb/tauri.deb.json
