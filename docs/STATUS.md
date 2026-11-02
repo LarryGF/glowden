@@ -11,8 +11,11 @@ target/release/lhub list         # CLI: devices and features (LHUB_DEBUG=1 print
 ```
 
 Device access comes from `packaging/udev/70-lhub.rules` (installed on this machine).
-`packaging/arch/PKGBUILD` installs the app, the CLI, the service, the rule and a systemd user
-unit (`systemctl --user enable --now lhubd`); the package itself hasn't been test-built.
+`packaging/arch/PKGBUILD` (built with `makepkg`) and `packaging/deb/build.sh` (Ubuntu 22.04
+container → `dist/lhub_<version>_amd64.deb`) install the app, the CLI, the service, the
+helpers, the rule, a systemd user unit and a desktop entry. The .deb was test-installed in
+clean Ubuntu 22.04 and Debian 12 containers (dependencies resolve, binaries start); the GUI
+from the packages hasn't been opened yet.
 
 ## Layout
 

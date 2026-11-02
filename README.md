@@ -52,6 +52,10 @@ Packages install all of that (binaries, rule, systemd user unit, desktop entry):
 - **Debian 12+ / Ubuntu 22.04+**: `packaging/deb/build.sh` builds `dist/lhub_<version>_amd64.deb`
   in an Ubuntu 22.04 container (needs Docker); install it with `sudo apt install ./dist/lhub_*.deb`.
 
+Blue VO!CE, the voice effects and the audio visualizer need PipeWire as the sound server
+(the default on Ubuntu 22.10+, Debian 12 desktops and Arch). Ubuntu 22.04 uses PulseAudio
+by default, so those features need `pipewire-pulse` there.
+
 Then start the service for your user: `systemctl --user enable --now lhubd` (the app also
 starts it when it isn't running).
 
