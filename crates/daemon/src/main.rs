@@ -56,6 +56,35 @@ impl State {
         cfg
     }
 
+    /// Goes back to the default DPI level, where the current level is kept (the active
+    /// profile's override, else the device's own config).
+    fn reset_dpi(&mut self, id: &str) {
+        let Some(default) = self.effective(id).dpi_default else {
+            return;
+        };
+        let active = self.active.clone();
+        let in_profile = active.as_ref().and_then(|name| {
+            self.config
+                .profiles
+                .iter_mut()
+                .find(|p| &p.name == name)?
+                .devices
+                .get_mut(id)
+                .filter(|d| d.dpi_level.is_some())
+        });
+        match in_profile {
+            Some(d) => d.dpi_level = Some(default),
+            None => {
+                self.config
+                    .devices
+                    .entry(id.to_string())
+                    .or_default()
+                    .dpi_level = Some(default)
+            }
+        }
+        self.config.save();
+    }
+
     /// Re-applies every connected device after the active profile changed.
     fn apply_all(&self) {
         for (id, h) in &self.workers {
@@ -86,6 +115,10 @@ impl State {
         if wanted != self.active {
             eprintln!("profile: {}", wanted.as_deref().unwrap_or("default"));
             self.active = wanted;
+            let ids: Vec<String> = self.workers.keys().cloned().collect();
+            for id in ids {
+                self.reset_dpi(&id);
+            }
             self.apply_all();
         }
     }
@@ -283,6 +316,7 @@ fn manage(shared: Shared) {
         let skip = |id: &str| known.iter().any(|k| k == id) || silent.contains_key(id);
         let quiet = hidpp::discover::scan_each(&skip, &mut |f| {
             let mut st = shared.0.lock().unwrap();
+            st.reset_dpi(&f.id);
             let cfg = st.effective(&f.id);
             eprintln!("{}: {} connected, applying {:?}", f.id, f.name, cfg);
             let id = f.id.clone();
@@ -362,6 +396,10 @@ enum Request {
         id: String,
         levels: Vec<u16>,
         level: usize,
+        #[serde(default)]
+        default: Option<usize>,
+        #[serde(default)]
+        shift: Option<u16>,
     },
     SetReportInterval {
         id: String,
@@ -841,13 +879,24 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
                 .and_then(|h| h.view.lock().unwrap().model.clone());
             Ok(json!(model.as_deref().and_then(view::image)))
         }
-        Request::SetDpi { id, levels, level } => {
+        Request::SetDpi {
+            id,
+            levels,
+            level,
+            default,
+            shift,
+        } => {
             if levels.is_empty() || levels.len() > 5 || level >= levels.len() {
                 return Err("need 1-5 DPI levels and a valid active level".into());
+            }
+            if default.is_some_and(|d| d >= levels.len()) {
+                return Err("the default level must be one of the levels".into());
             }
             update(shared, &id, |c| {
                 c.dpi_levels = levels;
                 c.dpi_level = Some(level);
+                c.dpi_default = default;
+                c.dpi_shift = shift;
             })
         }
         Request::SetReportInterval { id, ms } => {

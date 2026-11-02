@@ -103,6 +103,12 @@ pub struct DeviceConfig {
     pub dpi_levels: Vec<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dpi_level: Option<usize>,
+    /// G HUB's default level: the one set when the mouse connects or the profile switches.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dpi_default: Option<usize>,
+    /// DPI while a DPI shift button is held; the first level when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dpi_shift: Option<u16>,
     /// Lighting power switch; off keeps `lighting` for when it's switched back on.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub power: Option<bool>,
@@ -264,6 +270,12 @@ impl Config {
         }
         if over.dpi_level.is_some() {
             cfg.dpi_level = over.dpi_level;
+        }
+        if over.dpi_default.is_some() {
+            cfg.dpi_default = over.dpi_default;
+        }
+        if over.dpi_shift.is_some() {
+            cfg.dpi_shift = over.dpi_shift;
         }
         if over.report_interval.is_some() {
             cfg.report_interval = over.report_interval;

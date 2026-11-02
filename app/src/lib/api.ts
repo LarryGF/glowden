@@ -103,6 +103,8 @@ export interface DeviceConfig {
   power?: boolean;
   dpi_levels?: number[];
   dpi_level?: number;
+  dpi_default?: number;
+  dpi_shift?: number;
   report_interval?: number;
 }
 
@@ -195,7 +197,8 @@ export const api = {
   lightingState: (id: string) => request<LightState>({ cmd: "lighting_state", id }),
   deviceImage: (id: string) => request<string | null>({ cmd: "device_image", id }),
   mouseInfo: (id: string) => request<MouseInfo>({ cmd: "mouse_info", id }),
-  setDpi: (id: string, levels: number[], level: number) => request<void>({ cmd: "set_dpi", id, levels, level }),
+  setDpi: (id: string, levels: number[], level: number, dflt: number | null = null, shift: number | null = null) =>
+    request<void>({ cmd: "set_dpi", id, levels, level, default: dflt, shift }),
   setReportInterval: (id: string, ms: number) => request<void>({ cmd: "set_report_interval", id, ms }),
   getGain: (id: string) => request<number>({ cmd: "get_gain", id }),
   setGain: (id: string, gain: number) => request<void>({ cmd: "set_gain", id, gain }),

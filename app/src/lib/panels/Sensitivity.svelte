@@ -6,6 +6,8 @@
 
   let levels = $state<number[]>([800, 1200, 1600, 2400, 3200]);
   let active = $state(0);
+  let defaultLevel = $state<number | null>(null);
+  let shift = $state<number | null>(null);
   let min = $state(100);
   let max = $state(25600);
   let step = $state(50);
@@ -29,6 +31,8 @@
       if (cfg.dpi_levels?.length) {
         levels = cfg.dpi_levels;
         active = cfg.dpi_level ?? 0;
+        defaultLevel = cfg.dpi_default ?? null;
+        shift = cfg.dpi_shift ?? null;
       } else {
         // No saved levels yet: make the mouse's current DPI the active one.
         const i = levels.indexOf(info.dpi);
@@ -41,7 +45,12 @@
     loaded = true;
   });
 
-  const pushDpi = debounce(() => loaded && api.setDpi(device.id, levels, active).catch(onerror));
+  const pushDpi = debounce(() => loaded && api.setDpi(device.id, levels, active, defaultLevel, shift).catch(onerror));
+
+  function toggleDefault(i: number) {
+    defaultLevel = defaultLevel === i ? null : i;
+    pushDpi();
+  }
 
   function select(i: number) {
     active = i;
@@ -57,6 +66,7 @@
   function remove(i: number) {
     if (levels.length <= 1) return;
     levels = levels.filter((_, j) => j !== i);
+    if (defaultLevel !== null) defaultLevel = defaultLevel === i ? null : defaultLevel > i ? defaultLevel - 1 : defaultLevel;
     select(Math.min(active, levels.length - 1));
   }
 
@@ -74,6 +84,7 @@
       {#each levels as dpi, i}
         <div class="chip" class:active={i === active}>
           <button class="value" onclick={() => select(i)}>{dpi}</button>
+          <button class="star" class:on={defaultLevel === i} title={defaultLevel === i ? "Default level (click to unset)" : "Make this the default level"} aria-label="Default level" onclick={() => toggleDefault(i)}>◆</button>
           {#if levels.length > 1}<button class="x" aria-label="Remove level" onclick={() => remove(i)}>×</button>{/if}
         </div>
       {/each}
@@ -85,6 +96,17 @@
     <span class="label">Level {active + 1} <em>{levels[active]} DPI</em></span>
     <input type="range" {min} {max} {step} bind:value={levels[active]} oninput={pushDpi} />
   </label>
+
+  <div class="row">
+    <span class="label">DPI shift <em>{shift ?? levels[0]} DPI{shift === null ? " (level 1)" : ""}</em></span>
+    <div class="rates">
+      <button class:active={shift === null} onclick={() => ((shift = null), pushDpi())}>Level 1</button>
+      <button class:active={shift !== null} onclick={() => ((shift = shift ?? 400), pushDpi())}>Custom</button>
+    </div>
+    {#if shift !== null}
+      <input type="range" {min} {max} {step} bind:value={shift} oninput={pushDpi} />
+    {/if}
+  </div>
 
   {#if intervals.length}
     <div class="row">
@@ -98,8 +120,9 @@
   {/if}
 
   <p class="note">
-    The active level is applied to the mouse and restored whenever it reconnects. Cycling levels
-    with the mouse's DPI buttons comes with button assignments.
+    The active level is applied to the mouse and kept when you change it with the DPI buttons.
+    With a default level (◆), the mouse goes back to it when it reconnects or a profile
+    switches, as in G HUB. DPI shift applies while a DPI shift button is held.
   </p>
 </div>
 
@@ -114,6 +137,8 @@
   .chip button { border: none; border-radius: 0; background: var(--bg-card); }
   .chip.active .value { color: var(--accent); }
   .chip .x { color: var(--text-faint); padding: 7px 9px; }
+  .chip .star { color: var(--text-faint); padding: 7px 4px 7px 2px; font-size: 10px; }
+  .chip .star.on { color: var(--accent); }
   .rates button.active { border-color: var(--accent); color: var(--accent); }
   .add { color: var(--text-dim); }
   .note { color: var(--text-faint); font-size: 12px; margin: 0; }

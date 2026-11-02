@@ -12,7 +12,7 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Device discovery: USB, LIGHTSPEED receivers, headset dongle | done | Including the G522 behind its headset bridge |
 | Stable identity across replug | done | USB port + product id |
 | Battery status (`unified battery`) | done | Keyboard, mouse |
-| Headset battery (centurion `0x0104`) | next | |
+| Headset battery (centurion `0x0104`) | built | Percent and charging flag; charging flag not yet confirmed on the G522 |
 | Background agent that keeps settings applied | done | `lhubd`, systemd user unit |
 | Settings re-applied on reconnect/wake | built | Rescan every 3 s |
 | Multiple devices of the same model | built | Ids are per USB port |
@@ -48,9 +48,9 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 
 | G HUB feature | Status | Notes |
 |---|---|---|
-| DPI levels, default, shift | built | `0x2201` levels + active level in service and UI; shift = lowest level while held |
+| DPI levels, default, shift | built | `0x2201` levels + active level; default level (◆) applied on connect and profile switch; shift = level 1 or a custom DPI while held |
 | Report rate | done | `0x8060` read/write verified |
-| Default DPI level, DPI shift target, "go to shift" assignment | planned | `/mouse/dpi_default`, `/mouse/dpi_go_to_shift` |
+| Default DPI level, DPI shift target, "go to shift" assignment | built | `/mouse/dpi_default`, `/mouse/dpi_go_to_shift` |
 | Advanced DPI (separate X/Y), DPI correction | planned | `DPI_ADVANCED`, `DPI_CORRECTION` |
 | DPI tester tool | planned | G HUB ships `dpi-tester.min.js` |
 | Left-handed (swap buttons) | built | Settings toggle; swaps buttons 1/2 in the mouse routing |

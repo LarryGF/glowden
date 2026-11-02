@@ -568,6 +568,7 @@ struct Buttons {
     routed: Option<Vec<u8>>,
     /// Keys each held button keeps down, released with it.
     holding: HashMap<u8, Vec<u16>>,
+    shift_dpi: Option<u16>,
     /// Last button pressed, for the app's "press the button" detection.
     last: Arc<Mutex<Option<(u8, Instant)>>>,
 }
@@ -594,12 +595,14 @@ impl Buttons {
             swap: false,
             routed: None,
             holding: HashMap::new(),
+            shift_dpi: None,
             last,
         }
     }
 
     fn configure(&mut self, found: &mut Found, cfg: &DeviceConfig) {
         self.levels = cfg.dpi_levels.clone();
+        self.shift_dpi = cfg.dpi_shift;
         self.level = cfg
             .dpi_level
             .unwrap_or(0)
@@ -803,6 +806,17 @@ impl Buttons {
             return;
         }
         let last = self.levels.len() - 1;
+        if action == "shift"
+            && down
+            && let Some(dpi) = self.shift_dpi
+        {
+            if found.device.host_mode()
+                && let Err(e) = devices::mouse::set_dpi(&mut found.device, dpi, 1)
+            {
+                eprintln!("{}: dpi shift: {e}", found.id);
+            }
+            return;
+        }
         let target = match (action, down) {
             ("shift", true) => Some(0),
             ("shift", false) => Some(self.level),
