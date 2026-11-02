@@ -237,3 +237,53 @@ impl Effect for Visualizer {
         }
     }
 }
+
+/// Screen sampler: each key shows the color of the part of the screen at its place on the
+/// board, smoothed so the lights follow the picture without flicker.
+pub struct Screen {
+    /// 0..1: how quickly a key follows a change.
+    pub follow: f32,
+    /// Extra saturation, 0 = as on screen.
+    pub saturation: f32,
+    sampler: std::sync::Arc<crate::screen::ScreenSampler>,
+    grid: Vec<Rgb>,
+    shown: std::collections::HashMap<u8, [f32; 3]>,
+}
+
+impl Screen {
+    pub fn new() -> std::io::Result<Self> {
+        Ok(Screen {
+            follow: 0.35,
+            saturation: 0.0,
+            sampler: crate::screen::ScreenSampler::shared()?,
+            grid: Vec::new(),
+            shown: Default::default(),
+        })
+    }
+}
+
+impl Effect for Screen {
+    fn begin_frame(&mut self, _t: f32) {
+        self.grid.clone_from(&self.sampler.grid.lock().unwrap());
+    }
+
+    fn color(&mut self, key: &Key, _t: f32, _: &[Press], _: Instant) -> Rgb {
+        use crate::screen::{COLS, ROWS};
+        let (w, h) = crate::layout::SIZE;
+        let c = ((key.x / w) * COLS as f32).clamp(0.0, COLS as f32 - 1.0) as usize;
+        let r = ((key.y / h) * ROWS as f32).clamp(0.0, ROWS as f32 - 1.0) as usize;
+        let mut target = self.grid.get(r * COLS + c).copied().unwrap_or([0; 3]);
+        if self.saturation > 0.0 {
+            let grey = (target[0] as f32 + target[1] as f32 + target[2] as f32) / 3.0;
+            for ch in &mut target {
+                *ch =
+                    (grey + (*ch as f32 - grey) * (1.0 + self.saturation)).clamp(0.0, 255.0) as u8;
+            }
+        }
+        let s = self.shown.entry(key.zone).or_insert([0.0; 3]);
+        for i in 0..3 {
+            s[i] += (target[i] as f32 - s[i]) * self.follow;
+        }
+        [s[0] as u8, s[1] as u8, s[2] as u8]
+    }
+}

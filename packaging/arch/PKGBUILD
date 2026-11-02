@@ -14,7 +14,7 @@ build() {
   pnpm install --frozen-lockfile
   pnpm tauri build
   cd ..
-  cargo build --release -p lhub-cli -p lhubd -p lhub-voice
+  cargo build --release -p lhub-cli -p lhubd -p lhub-voice -p lhub-sampler
 }
 
 package() {
@@ -23,6 +23,7 @@ package() {
   install -Dm755 "$root/target/release/lhub" "$pkgdir/usr/bin/lhub"
   install -Dm755 "$root/target/release/lhubd" "$pkgdir/usr/bin/lhubd"
   install -Dm755 "$root/target/release/lhub-voice" "$pkgdir/usr/bin/lhub-voice"
+  install -Dm755 "$root/target/release/lhub-sampler" "$pkgdir/usr/bin/lhub-sampler"
   install -Dm644 -t "$pkgdir/usr/share/lhub/drivers" "$root"/drivers/*.toml
   install -Dm644 -t "$pkgdir/usr/share/lhub/drivers/pictures" "$root"/drivers/pictures/*
   install -Dm644 "$root/packaging/udev/70-lhub.rules" "$pkgdir/usr/lib/udev/rules.d/70-lhub.rules"

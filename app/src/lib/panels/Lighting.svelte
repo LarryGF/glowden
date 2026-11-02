@@ -21,6 +21,7 @@
           { key: "wave", label: "Wave", group: "live" as const },
           { key: "starlight", label: "Starlight", group: "live" as const },
           { key: "visualizer", label: "Audio visualizer", group: "live" as const },
+          { key: "screen", label: "Screen sampler", group: "live" as const },
         ]
       : []),
     ...(device.caps.includes("reactive") ? [{ key: "pulse", label: "Pulse", group: "live" as const }] : []),
@@ -36,6 +37,7 @@
   let width = $state(35);
   let fade = $state(40);
   let density = $state(30);
+  let boost = $state(0);
   let rainbow = $state(false);
   let glow = $state(100);
   let backdrop = $state(100);
@@ -85,6 +87,7 @@
           if (l.effect === "pulse") ({ base, width, fade, rainbow } = l);
           if (l.effect === "starlight") ({ star: color, sky: base, density } = l);
           if (l.effect === "visualizer") ({ low: color, high: peak, background: base } = l);
+          if (l.effect === "screen") ({ boost } = l);
         }
       }
     }
@@ -136,6 +139,7 @@
       case "pulse": return { effect, color, base, speed, width, fade, rainbow, glow, backdrop };
       case "starlight": return { effect, star: color, sky: base, density, glow, backdrop };
       case "visualizer": return { effect, low: color, high: peak, background: base, glow, backdrop };
+      case "screen": return { effect, speed, boost };
       default: return { effect: "fixed", color };
     }
   }
@@ -161,8 +165,8 @@
 
   const current = $derived(options.find((o) => o.key === effect));
   const firmware = $derived(effect.startsWith("fw:"));
-  const hasColor = $derived(effect !== "cycle" && effect !== "wave");
-  const hasSpeed = $derived(["breathing", "cycle", "wave", "pulse"].includes(effect));
+  const hasColor = $derived(effect !== "cycle" && effect !== "wave" && effect !== "screen");
+  const hasSpeed = $derived(["breathing", "cycle", "wave", "pulse", "screen"].includes(effect));
   const layered = $derived(["pulse", "starlight", "visualizer"].includes(effect));
   const colorLabel = $derived(
     effect === "starlight" ? "Star color" : effect === "pulse" ? "Pulse color" : effect === "visualizer" ? "Low color" : firmware ? "Effect color" : "Color",
@@ -238,6 +242,13 @@
       <label><span class="label">Ring width <em>{width}</em></span><input type="range" min="1" max="100" bind:value={width} oninput={push} /></label>
       <label><span class="label">Fade time <em>{fade}</em></span><input type="range" min="1" max="100" bind:value={fade} oninput={push} /></label>
       <label class="inline"><input type="checkbox" bind:checked={rainbow} onchange={push} /><span>Rainbow rings</span></label>
+    {/if}
+    {#if effect === "screen"}
+      <label><span class="label">Color boost <em>{boost}</em></span><input type="range" min="0" max="100" bind:value={boost} oninput={push} /></label>
+      <p class="note">
+        The first time, your desktop asks which screen to share; lhub remembers the answer.
+        Each key shows the part of the screen at its place on the board.
+      </p>
     {/if}
     {#if effect === "starlight"}
       <label><span class="label">Density <em>{density}</em></span><input type="range" min="1" max="100" bind:value={density} oninput={push} /></label>

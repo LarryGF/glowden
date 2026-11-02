@@ -61,6 +61,15 @@ pub enum Lighting {
         #[serde(default = "full")]
         backdrop: u8,
     },
+    /// Screen sampler: keys show the screen's colors at their place on the board.
+    Screen {
+        /// How quickly the lights follow the picture, 1..100.
+        #[serde(default = "half")]
+        speed: u8,
+        /// Extra color saturation, 0..100.
+        #[serde(default)]
+        boost: u8,
+    },
     Visualizer {
         low: String,
         high: String,
@@ -88,6 +97,7 @@ impl Lighting {
                 | Lighting::Pulse { .. }
                 | Lighting::Starlight { .. }
                 | Lighting::Visualizer { .. }
+                | Lighting::Screen { .. }
         )
     }
 }
@@ -377,6 +387,10 @@ pub fn period_ms(speed: u8) -> u16 {
 
 fn full() -> u8 {
     100
+}
+
+fn half() -> u8 {
+    50
 }
 
 /// Color from config, scaled by a 0..=100 layer level.

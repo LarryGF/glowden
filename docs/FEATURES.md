@@ -31,11 +31,11 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Firmware reactive ripple (G515 `0x0017`) | done | Verified by user |
 | Other firmware all-zones effects (G515 `0x000c 0x0013 0x0016 0x0018 0x0019`, G502 `0x0004 0x000c 0x000f 0x0010 0x0013`) | next | Parameters partly seen in captures |
 | Audio visualizer | built | PipeWire monitor of default output |
-| Screen sampler | planned | Wayland: needs xdg-desktop-portal screencast |
+| Screen sampler | built | `lhub-sampler`: ScreenCast portal (restore token, asks once) → PipeWire video → 16×9 color grid; each key shows the screen at its place. One capture shared by all devices. Not yet tried on the desktop |
 | LIGHTSYNC: same effect on all devices | done | Sync skips device-specific effects and devices running one |
 | Palettes (vibrant, pastel, mono, signature, custom) | done | Own palettes plus saved custom colors in the color picker |
 | Custom effect editor, save/import/export | planned | |
-| Turn off lighting after inactivity | next | RGB `0x8071` fn 7 power settings seen in captures |
+| Turn off lighting after inactivity | blocked | RGB `0x8071` fn 7: G HUB reads `[00]` → `00 00 00 3c 01 2c` and writes `01 00 00 00 3c 01 0e`. G HUB's settings are `inactivity_light_start_after` (power-saving timer) and `inactivity_light_off_after` (lights-off timer), in minutes, but the byte meaning isn't clear without a labeled capture. Host-side idle isn't available either: KWin doesn't support `GetSessionIdleTime` on Wayland |
 | Lighting off while the PC sleeps / locks | built | Locked session (logind LockedHint) → lights off, restored on unlock; Settings toggle, on by default |
 | Low-battery lighting effect | built | Red breathing at ≤15 % (not charging) until charging or >20 %; Settings toggle |
 | Power-saving lighting effect | planned | Device setting `POWER_SAVING_EFFECT` |

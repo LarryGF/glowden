@@ -95,7 +95,8 @@ export type Lighting =
   | { effect: "wave"; speed: number }
   | { effect: "pulse"; color: string; base: string; speed: number; width: number; fade: number; rainbow: boolean; glow: number; backdrop: number }
   | { effect: "starlight"; star: string; sky: string; density: number; glow: number; backdrop: number }
-  | { effect: "visualizer"; low: string; high: string; background: string; glow: number; backdrop: number };
+  | { effect: "visualizer"; low: string; high: string; background: string; glow: number; backdrop: number }
+  | { effect: "screen"; speed: number; boost: number };
 
 export interface DeviceConfig {
   lighting?: Lighting;

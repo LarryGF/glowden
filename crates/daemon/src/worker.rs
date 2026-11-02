@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use hidpp::devices::{self, Effect as DeviceEffect, mic};
 use hidpp::discover::Found;
-use lighting::effects::{Pulse, Starlight, Visualizer, Wave};
+use lighting::effects::{Pulse, Screen, Starlight, Visualizer, Wave};
 use lighting::engine::{Effect, Press, Streamer};
 use serde_json::{Value, json};
 
@@ -476,6 +476,12 @@ fn host_effect(l: &Lighting) -> Result<Box<dyn Effect>, String> {
             )
             .map_err(|e| format!("audio capture (pw-record): {e}"))?,
         ),
+        Lighting::Screen { speed, boost } => {
+            let mut s = Screen::new().map_err(|e| format!("screen capture (lhub-sampler): {e}"))?;
+            s.follow = lerp(*speed, 0.05, 0.9);
+            s.saturation = *boost as f32 / 50.0;
+            Box::new(s)
+        }
         _ => unreachable!("device-native effect"),
     })
 }
