@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api, type AppInfo } from "./api";
+  import { open } from "@tauri-apps/plugin-dialog";
+  import { api, type AppInfo, type GhubSummary } from "./api";
 
   let { onerror, onchanged }: { onerror: (e: unknown) => void; onchanged: () => void } = $props();
 
   let info = $state<AppInfo | null>(null);
-  let newPath = $state("");
   let report = $state("");
+  let found = $state<GhubSummary | null>(null);
   let busy = $state("");
   let backups = $state<string[]>([]);
   const when = (name: string) => new Date(Number(name) * 1000).toLocaleString();
@@ -28,6 +29,7 @@
   onMount(() => {
     load();
     backup(api.backups());
+    api.scanGhub(false).then((s) => (found = s)).catch(() => {});
   });
 
   async function save(change: (s: AppInfo["settings"]) => void) {
@@ -42,21 +44,18 @@
   }
 
   async function addPath() {
-    const p = newPath.trim();
-    if (!p || info?.settings.ghub_paths.includes(p)) return;
+    const p = await open({ directory: true, title: "Choose a folder with G HUB files" }).catch(onerror);
+    if (typeof p !== "string" || info?.settings.ghub_paths.includes(p)) return;
     await save((s) => s.ghub_paths.push(p));
-    newPath = "";
+    await scan();
   }
 
-  async function scan(paths: string[]) {
+  async function scan() {
     busy = "scan";
-    report = "";
-    for (const p of paths) {
-      try {
-        report += `${p}\n${await api.importGhub(p)}\n`;
-      } catch (e) {
-        report += `${p}\n${String(e)}\n`;
-      }
+    try {
+      found = await api.scanGhub();
+    } catch (e) {
+      onerror(e);
     }
     busy = "";
     onchanged();
@@ -91,18 +90,18 @@
 {#if info}
   <div class="page">
     <section class="card">
-      <h2>G HUB data</h2>
+      <h2>G HUB files</h2>
       <p class="note">
-        Folders copied from a Windows G HUB install. Scanning imports device pictures and LED
-        layouts, the Blue VO!CE engine and its presets. Useful folders:
-        <code>C:\ProgramData\LGHUB\depots</code> and <code>%LOCALAPPDATA%\LGHUB</code> (for
-        <code>settings.db</code>).
+        GlowDen can use the device pictures, LED layouts, sound clips, Blue VO!CE engine and
+        presets of a G HUB installation you have, for example on a dual-boot Windows drive
+        (mount it, then choose the drive or its <code>ProgramData\LGHUB</code> folder). Any
+        folder holding those files works. GlowDen reads them where they are and never copies
+        them; what you point it at, and under which terms you got it, is up to you.
       </p>
       <ul class="paths">
         {#each info.settings.ghub_paths as p}
           <li>
             <span class="path">{p}</span>
-            <button onclick={() => scan([p])} disabled={!!busy}>Scan</button>
             <button class="ghost" onclick={() => save((s) => (s.ghub_paths = s.ghub_paths.filter((x) => x !== p)))}>Remove</button>
           </li>
         {:else}
@@ -110,12 +109,19 @@
         {/each}
       </ul>
       <div class="add">
-        <input placeholder="/path/to/LGHUB/depots" bind:value={newPath} onkeydown={(e) => e.key === "Enter" && addPath()} />
-        <button onclick={addPath}>Add folder</button>
-        <button onclick={() => scan(info!.settings.ghub_paths)} disabled={!!busy || info.settings.ghub_paths.length === 0}>
-          {busy === "scan" ? "Scanning…" : "Scan all"}
+        <button onclick={addPath} disabled={!!busy}>Add folder…</button>
+        <button onclick={scan} disabled={!!busy || info.settings.ghub_paths.length === 0}>
+          {busy === "scan" ? "Scanning…" : "Scan again"}
         </button>
       </div>
+      {#if found}
+        <ul class="found">
+          {#each found.devices as d}<li class:ok={d.found}>{d.found ? "✓" : "–"} {d.name}: picture and LED layout</li>{/each}
+          <li class:ok={found.sounds > 0}>{found.sounds > 0 ? "✓" : "–"} {found.sounds} sound clips</li>
+          <li class:ok={found.voice_presets > 0}>{found.voice_presets > 0 ? "✓" : "–"} {found.voice_presets} Blue VO!CE presets, {found.voice_effects} voice effects{found.settings ? ` (${found.settings.split("/").pop()})` : ""}</li>
+          <li class:ok={!!found.engine}>{found.engine ? "✓" : "–"} Blue VO!CE engine{found.engine ? "" : " (in Windows' DriverStore once G HUB's audio driver is installed)"}</li>
+        </ul>
+      {/if}
       {#if report}<pre>{report}</pre>{/if}
     </section>
 
@@ -217,6 +223,8 @@
 
 <style>
   .page { height: 100%; overflow: auto; padding: 28px 40px; display: flex; flex-direction: column; gap: 20px; max-width: 980px; margin: 0 auto; }
+  .found { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-faint); }
+  .found .ok { color: var(--text); }
   .card { background: var(--bg-card); border-radius: 14px; padding: 22px 26px; display: flex; flex-direction: column; gap: 14px; }
   h2 { margin: 0; font-size: 16px; letter-spacing: 0.04em; text-transform: uppercase; }
   .note { margin: 0; color: var(--text-faint); font-size: 12px; line-height: 1.5; }

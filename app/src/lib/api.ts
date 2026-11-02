@@ -34,6 +34,15 @@ export type VoiceState = {
 /** G HUB's voice effect settings: stage → field → value. */
 export type EffectSettings = Record<string, Record<string, number | boolean | string>>;
 
+export type GhubSummary = {
+  devices: { name: string; found: boolean }[];
+  sounds: number;
+  voice_presets: number;
+  voice_effects: number;
+  settings: string | null;
+  engine: string | null;
+};
+
 export type AppInfo = {
   settings: { ghub_paths: string[]; low_battery_alert: boolean; lighting_off_when_locked: boolean; swap_mouse_buttons: boolean; low_battery_lighting: boolean; lock_notifications: boolean };
   autostart: boolean;
@@ -188,7 +197,7 @@ export const api = {
     request<void>({ cmd: "set_assignment", id, button, action }),
   setAppSettings: (settings: AppInfo["settings"]) => request<AppInfo>({ cmd: "set_app_settings", settings }),
   setAutostart: (on: boolean) => request<boolean>({ cmd: "set_autostart", on }),
-  importGhub: (path: string) => request<string>({ cmd: "import_ghub", path }),
+  scanGhub: (rescan = true) => request<GhubSummary>({ cmd: "scan_ghub", rescan }),
   createDriver: (id: string) => request<string>({ cmd: "create_driver", id }),
   getConfig: (id: string) => request<DeviceConfig>({ cmd: "get_config", id }),
   setLighting: (id: string, lighting: Lighting) => request<void>({ cmd: "set_lighting", id, lighting }),

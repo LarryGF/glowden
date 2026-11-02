@@ -2,6 +2,7 @@
 //! Unix socket with one JSON request/response per line.
 
 mod app;
+mod assets;
 mod battery;
 mod config;
 mod drivers;
@@ -202,6 +203,7 @@ fn main() {
         }),
         Condvar::new(),
     ));
+    assets::set_roots(&shared.0.lock().unwrap().config.app.ghub_paths);
 
     let manager = shared.clone();
     std::thread::spawn(move || manage(manager));
@@ -523,8 +525,10 @@ enum Request {
     SetAutostart {
         on: bool,
     },
-    ImportGhub {
-        path: String,
+    /// What the G HUB folders provide; with `rescan`, looks through them again first.
+    ScanGhub {
+        #[serde(default)]
+        rescan: bool,
     },
     CreateDriver {
         id: String,
@@ -838,13 +842,21 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
             let swap_changed = st.config.app.swap_mouse_buttons != settings.swap_mouse_buttons;
             st.config.app = settings;
             st.config.save();
+            assets::set_roots(&st.config.app.ghub_paths);
             if swap_changed {
                 st.apply_all();
             }
             Ok(app_settings(&st))
         }
         Request::SetAutostart { on } => app::set_autostart(on).map(|_| json!(app::autostart())),
-        Request::ImportGhub { path } => app::import_ghub(&path).map(|t| json!(t)),
+        Request::ScanGhub { rescan } => {
+            let st = lock.lock().unwrap();
+            assets::set_roots(&st.config.app.ghub_paths);
+            if rescan {
+                assets::rescan();
+            }
+            Ok(ghub_summary(&st))
+        }
         Request::CreateDriver { id } => create_driver(shared, &id),
         Request::SetVoice {
             id,
@@ -1322,27 +1334,34 @@ fn profiles(st: &State) -> Value {
     })
 }
 
-/// Imported sound clips as (category/name, path).
+/// G HUB's sound clips from the user's G HUB folders, as (category / name, path).
 fn sounds() -> Vec<Value> {
-    let dir = PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
-        .join(".local/share/glowden/sounds");
-    let mut out = Vec::new();
-    for cat in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
-        for f in std::fs::read_dir(cat.path())
-            .into_iter()
-            .flatten()
-            .flatten()
-        {
-            let name = format!(
-                "{} / {}",
-                cat.file_name().to_string_lossy(),
-                f.path().file_stem().unwrap_or_default().to_string_lossy()
-            );
-            out.push(json!({ "name": name, "file": f.path().display().to_string() }));
-        }
-    }
-    out.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
-    out
+    assets::sound_clips()
+        .into_iter()
+        .map(|(name, file)| json!({ "name": name, "file": file.display().to_string() }))
+        .collect()
+}
+
+/// What the G HUB folders provide, for the Settings page.
+fn ghub_summary(st: &State) -> Value {
+    let index = assets::current();
+    let devices: Vec<Value> = st
+        .drivers
+        .all()
+        .iter()
+        .filter_map(|d| {
+            let model = d.ghub_model.as_deref()?;
+            Some(json!({ "name": d.name, "found": index.package(model).is_some() }))
+        })
+        .collect();
+    json!({
+        "devices": devices,
+        "sounds": assets::sound_clips().len(),
+        "voice_presets": voice::presets().len(),
+        "voice_effects": voice::effect_presets().len(),
+        "settings": index.settings.first(),
+        "engine": index.engine,
+    })
 }
 
 fn backup_dir() -> PathBuf {

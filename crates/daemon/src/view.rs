@@ -166,12 +166,10 @@ pub fn build(f: &mut Found, driver: Option<&crate::drivers::Driver>) -> DeviceVi
     }
 }
 
-/// Picture imported from G HUB for `model`, as a data URL. Front views first, dark
-/// variants preferred.
+/// The device's picture from the user's G HUB folders, as a data URL. Front views first,
+/// dark variants preferred.
 pub fn image(model: &str) -> Option<String> {
-    let dir = std::path::PathBuf::from(std::env::var_os("HOME")?)
-        .join(".local/share/glowden/devices")
-        .join(model);
+    let index = crate::assets::current();
     // Product views only; splash screens and promo cards are marketing art, not the device.
     const PREFERRED: [&str; 6] = [
         "front.png",
@@ -181,13 +179,9 @@ pub fn image(model: &str) -> Option<String> {
         "device_black.webp",
         "front_white.webp",
     ];
-    let path = PREFERRED.iter().map(|f| dir.join(f)).find(|p| p.exists())?;
+    let path = PREFERRED.iter().find_map(|f| index.device_file(model, f))?;
     let bytes = std::fs::read(&path).ok()?;
-    let mime = if path.extension()? == "png" {
-        "image/png"
-    } else {
-        "image/webp"
-    };
+    let mime = format!("image/{}", crate::assets::image_type(&path)?);
     Some(format!("data:{mime};base64,{}", base64(&bytes)))
 }
 
@@ -234,11 +228,11 @@ fn image_size(bytes: &[u8]) -> Option<(u32, u32)> {
 }
 
 /// A driver's product photo with its LED regions. The photo is downloaded once into the
-/// device's data directory; None when it can't be fetched (offline) or doesn't match.
+/// cache; None when it can't be fetched (offline) or doesn't match.
 pub fn photo_layout(model: &str, photo: &crate::drivers::Photo) -> Option<serde_json::Value> {
     use serde_json::json;
     let dir = std::path::PathBuf::from(std::env::var_os("HOME")?)
-        .join(".local/share/glowden/devices")
+        .join(".cache/glowden/photos")
         .join(model);
     let file = dir.join("product-photo.png");
     let source = dir.join("product-photo.url");
@@ -298,11 +292,10 @@ pub fn layout(
     fallback_clip: Option<&str>,
 ) -> Option<serde_json::Value> {
     use serde_json::{Value, json};
-    let dir = std::path::PathBuf::from(std::env::var_os("HOME")?)
-        .join(".local/share/glowden/devices")
-        .join(model);
+    let index = crate::assets::current();
     let meta: Value =
-        serde_json::from_slice(&std::fs::read(dir.join("metadata.json")).ok()?).ok()?;
+        serde_json::from_slice(&std::fs::read(index.device_file(model, "metadata.json")?).ok()?)
+            .ok()?;
     let images = meta["images"].as_array()?;
     let has_shapes = |img: &Value| {
         img["zones"].as_array().is_some_and(|z| {
@@ -320,18 +313,7 @@ pub fn layout(
     );
 
     // The picture this geometry belongs to: same pixel size, lighting/front/dark variants first.
-    let mut candidates = Vec::new();
-    let mut stack = vec![dir.clone()];
-    while let Some(d) = stack.pop() {
-        for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
-            let p = e.path();
-            if p.is_dir() {
-                stack.push(p);
-            } else if matches!(p.extension().and_then(|e| e.to_str()), Some("png" | "webp")) {
-                candidates.push(p);
-            }
-        }
-    }
+    let mut candidates = index.pictures(model);
     let rank = |p: &std::path::Path| {
         let n = p.to_string_lossy().to_lowercase();
         (
@@ -353,10 +335,9 @@ pub fn layout(
         // The driver's own drawing, made at the geometry's size.
         .map(|(p, b)| (p, b, false))
         .or_else(|| fallback.and_then(|p| Some((p.to_path_buf(), std::fs::read(p).ok()?, true))))?;
-    let mime = match path.extension()?.to_str()? {
-        "png" => "image/png",
-        "svg" => "image/svg+xml",
-        _ => "image/webp",
+    let mime = match crate::assets::image_type(&path) {
+        Some(t) => format!("image/{t}"),
+        None => "image/svg+xml".to_string(),
     };
 
     // Multi-view lighting pictures list one bounds box per view; optionally show the first.

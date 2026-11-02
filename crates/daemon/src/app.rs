@@ -48,29 +48,6 @@ pub fn set_autostart(on: bool) -> Result<(), String> {
         .ok_or_else(|| "systemctl --user failed".to_string())
 }
 
-/// Runs `glowdenctl import-ghub` on a folder and returns its report.
-pub fn import_ghub(path: &str) -> Result<String, String> {
-    if !std::path::Path::new(path).is_dir() {
-        return Err(format!("{path} is not a folder"));
-    }
-    let glowden = std::env::current_exe()
-        .ok()
-        .and_then(|e| Some(e.parent()?.join("glowdenctl")))
-        .filter(|p| p.exists())
-        .unwrap_or_else(|| PathBuf::from("glowdenctl"));
-    let out = Command::new(glowden)
-        .args(["import-ghub", path])
-        .output()
-        .map_err(|e| format!("cannot run glowden: {e}"))?;
-    let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
-    text.push_str(&String::from_utf8_lossy(&out.stderr));
-    if out.status.success() {
-        Ok(text)
-    } else {
-        Err(text)
-    }
-}
-
 pub fn notify(title: &str, body: &str) {
     let _ = Command::new("notify-send")
         .args(["--app-name=glowden", "--icon=battery-caution", title, body])

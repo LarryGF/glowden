@@ -38,11 +38,7 @@ fn lighting_power(xml: &str, effect: &str, brightness: u8) -> Option<f32> {
 
 /// Hours left at the current settings, or None without a power model for `model`.
 pub fn hours_left(model: &str, percent: u8, cfg: &DeviceConfig) -> Option<f32> {
-    let home = std::env::var_os("HOME")?;
-    let path = std::path::Path::new(&home)
-        .join(".local/share/glowden/devices")
-        .join(model)
-        .join("battery.xml");
+    let path = crate::assets::current().device_file(model, "battery.xml")?;
     let xml = std::fs::read_to_string(path).ok()?;
     let capacity_mwh = attr(tag(&xml, "capacity", 0)?.0, "watts_per_hour")? * 1000.0;
     let mcu = attr(tag(&xml, "mcu", 0)?.0, "power").unwrap_or(0.0);

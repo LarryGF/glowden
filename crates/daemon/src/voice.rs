@@ -1,6 +1,6 @@
 //! Blue VO!CE: runs `glowden-voice` (the user's own copy of the ClearVoice 2 engine as a
 //! PipeWire virtual microphone) for devices whose driver file has a `[voice]` section.
-//! Engine and presets are imported with `glowdenctl import-ghub` / `glowdenctl import-voice-presets`.
+//! The engine DLL and the presets are read from the user's G HUB folders (see assets.rs).
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -10,22 +10,20 @@ use serde_json::Value;
 
 use crate::drivers::VoiceDef;
 
-pub fn dir() -> PathBuf {
-    PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/share/glowden/voice")
-}
-
 pub fn engine() -> Option<PathBuf> {
-    Some(dir().join("clearvoice2.dll")).filter(|p| p.exists())
+    crate::assets::current().engine.clone()
 }
 
-/// (name, settings) of each imported preset, in G HUB's order.
+/// (name, settings) of each VO!CE preset in G HUB's settings, in G HUB's order.
 pub fn presets() -> Vec<(String, Value)> {
-    let Ok(bytes) = std::fs::read(dir().join("presets.json")) else {
-        return Vec::new();
-    };
-    let list: Vec<Value> = serde_json::from_slice(&bytes).unwrap_or_default();
-    list.into_iter()
-        .filter_map(|p| Some((p["name"].as_str()?.to_string(), p["settings"].clone())))
+    crate::assets::ghub_cards("BLUE_VOICE_2_SETTINGS")
+        .into_iter()
+        .filter_map(|c| {
+            Some((
+                c["name"].as_str()?.to_string(),
+                c["blueVoice2Settings"]["settings"].clone(),
+            ))
+        })
         .collect()
 }
 
@@ -98,12 +96,25 @@ pub fn engine_args(settings: &Value) -> Vec<String> {
 
 /// Voice effect presets imported from G HUB: (name, settings), "Off" first.
 pub fn effect_presets() -> Vec<(String, Value)> {
-    let Ok(bytes) = std::fs::read(dir().join("effects.json")) else {
-        return Vec::new();
-    };
-    let list: Vec<Value> = serde_json::from_slice(&bytes).unwrap_or_default();
-    list.into_iter()
-        .filter_map(|p| Some((p["name"].as_str()?.to_string(), p["settings"].clone())))
+    // Named "NN_Name" in G HUB, NN giving its order; "00_FX_OFF" is shown as "Off".
+    let mut cards: Vec<(String, Value)> = crate::assets::ghub_cards("AUDIO_EFFECTS_SETTINGS")
+        .into_iter()
+        .filter_map(|c| {
+            let e = &c["audioEffectsSettings"];
+            Some((
+                e["description"]["name"].as_str()?.to_string(),
+                e["settings"].clone(),
+            ))
+        })
+        .collect();
+    cards.sort_by(|a, b| a.0.cmp(&b.0));
+    cards
+        .into_iter()
+        .map(|(name, s)| {
+            let shown = name.split_once('_').map_or(name.as_str(), |(_, n)| n);
+            let shown = if shown == "FX_OFF" { "Off" } else { shown };
+            (shown.to_string(), s)
+        })
         .collect()
 }
 

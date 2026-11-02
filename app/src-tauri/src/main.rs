@@ -137,6 +137,7 @@ fn show_window(app: &tauri::AppHandle) {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![request])
         .setup(|app| {
             let handle = app.handle().clone();
