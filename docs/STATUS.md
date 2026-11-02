@@ -5,7 +5,7 @@ Last updated 2026-11-02. Feature-by-feature port status lives in `FEATURES.md`.
 ## Running it
 
 ```sh
-target/release/lhub-app          # UI; starts the service if it isn't running
+target/release/lhub-app          # UI; starts the service if it isn't running (and restarts it if it dies)
 target/release/lhubd             # service on its own (log: ~/.local/state/lhub/lhubd.log)
 target/release/lhub list         # CLI: devices and features (LHUB_DEBUG=1 prints every frame)
 ```
@@ -22,7 +22,8 @@ unit (`systemctl --user enable --now lhubd`); the package itself hasn't been tes
 | `crates/lighting` | Key layout, per-key streaming engine, host effects, audio analyzer, key input |
 | `crates/daemon` | `lhubd`: device workers, persistent config, socket API |
 | `crates/cli` | `lhub` command-line tool and experiments |
-| `crates/voice/loader` | PE loader running Logitech's Blue VO!CE 2 (DTS ClearVoice 2) DLL natively |
+| `crates/voice` | `lhub-voice`: PE loader + PipeWire host running the user's DTS ClearVoice 2 DLL (VO!CE and the voice effect stages), level meter on stdout |
+| `crates/sampler` | `lhub-sampler`: ScreenCast portal + PipeWire video → color grid for the screen sampler effect |
 | `tools/voice-probes` | Offline VO!CE engine experiments |
 | `app` | Tauri + Svelte UI, a client of `lhubd` |
 | `packaging` | udev rule, systemd unit, Arch package |
