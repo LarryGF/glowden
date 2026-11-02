@@ -575,6 +575,7 @@ struct Buttons {
     /// Keys each held button keeps down, released with it.
     holding: HashMap<u8, Vec<u16>>,
     shift_dpi: Option<u16>,
+    spy_failed: bool,
     /// Last button pressed, for the app's "press the button" detection.
     last: Arc<Mutex<Option<(u8, Instant)>>>,
 }
@@ -602,6 +603,7 @@ impl Buttons {
             routed: None,
             holding: HashMap::new(),
             shift_dpi: None,
+            spy_failed: false,
             last,
         }
     }
@@ -629,12 +631,17 @@ impl Buttons {
         match devices::buttons::start_spy(&mut found.device) {
             Ok(index) => {
                 self.spy = Some(index);
+                self.spy_failed = false;
                 self.count = devices::buttons::count(&mut found.device).unwrap_or(0);
                 self.routed = devices::buttons::remapping(&mut found.device).ok();
                 self.route(found);
             }
             Err(e) => {
-                eprintln!("{}: button spy: {e}", found.id);
+                // Asleep mice fail every retry; say it once.
+                if self.spy.is_some() || !self.spy_failed {
+                    eprintln!("{}: button spy: {e}", found.id);
+                }
+                self.spy_failed = true;
                 self.spy = None;
             }
         }

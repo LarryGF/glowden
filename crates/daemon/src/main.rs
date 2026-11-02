@@ -150,13 +150,15 @@ fn single_instance() -> Option<std::fs::File> {
 
 fn main() {
     let path = socket_path();
-    voice::stop_stale();
-    let (focus_tx, focus_rx) = mpsc::channel::<focus::Focus>();
-    focus::spawn(focus_tx);
     let Some(_lock) = single_instance() else {
         eprintln!("lhubd already running ({})", path.display());
         return;
     };
+    // Only the instance that owns the lock may clean up, or a second start would kill the
+    // running service's hosts.
+    voice::stop_stale();
+    let (focus_tx, focus_rx) = mpsc::channel::<focus::Focus>();
+    focus::spawn(focus_tx);
     let _ = std::fs::remove_file(&path);
     let listener =
         UnixListener::bind(&path).unwrap_or_else(|e| panic!("bind {}: {e}", path.display()));
