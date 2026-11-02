@@ -36,7 +36,7 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Palettes (vibrant, pastel, mono, signature, custom) | done | Own palettes plus saved custom colors in the color picker |
 | Custom effect editor, save/import/export | planned | |
 | Turn off lighting after inactivity | next | RGB `0x8071` fn 7 power settings seen in captures |
-| Lighting off while the PC sleeps / locks | planned | App setting `lighting_sleep`, `/lighting/sleep` |
+| Lighting off while the PC sleeps / locks | built | Locked session (logind LockedHint) → lights off, restored on unlock; Settings toggle, on by default |
 | Low-battery and power-saving lighting effects | planned | Device settings `LOW_BATTERY_EFFECT`, `POWER_SAVING_EFFECT` |
 | Saved custom effects and presets (save, delete, import, export) | planned | `/lighting/effect/presets/*`, `/lighting/effect/import|export` |
 | Games driving lighting (LED SDK) | planned | `integration_manager_settings.allowLedSdk`; Proton games would need a bridge DLL |
@@ -63,7 +63,7 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | G HUB feature | Status | Notes |
 |---|---|---|
 | Key assignments, G-shift | planned | `0x1b05` full key customization |
-| Game mode (disable Win key etc.) | next | `0x4523` |
+| Game mode (disable Win key etc.) | next | `0x4523` at index 0x0c; G HUB traffic seen (fn1 → 04, fn3 → 01, fn0 write) but needs a labeled capture to decode |
 | Fn-layer and G-shift-layer key customization (remap, macros, samples, system actions; press/hold/toggle/loop playback) | planned | G HUB "FKC" |
 | Onboard profiles | planned | `0x8101` |
 | Per-key lighting | built | |
