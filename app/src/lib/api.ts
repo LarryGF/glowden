@@ -35,7 +35,7 @@ export type VoiceState = {
 export type EffectSettings = Record<string, Record<string, number | boolean | string>>;
 
 export type AppInfo = {
-  settings: { ghub_paths: string[]; low_battery_alert: boolean; lighting_off_when_locked: boolean; swap_mouse_buttons: boolean; low_battery_lighting: boolean };
+  settings: { ghub_paths: string[]; low_battery_alert: boolean; lighting_off_when_locked: boolean; swap_mouse_buttons: boolean; low_battery_lighting: boolean; lock_notifications: boolean };
   autostart: boolean;
   drivers: { name: string; file: string; products: string[] }[];
   devices: { id: string; name: string; product: string; kind: string; driver: string | null }[];

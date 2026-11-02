@@ -205,6 +205,12 @@
           {info.settings.low_battery_alert ? "On" : "Off"}
         </button>
       </label>
+      <label class="row">
+        <span>Notify when Caps Lock or Num Lock changes</span>
+        <button class="switch" class:on={info.settings.lock_notifications} onclick={() => save((s) => (s.lock_notifications = !s.lock_notifications))}>
+          {info.settings.lock_notifications ? "On" : "Off"}
+        </button>
+      </label>
     </section>
   </div>
 {/if}

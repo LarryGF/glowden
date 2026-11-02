@@ -5,6 +5,24 @@
   import BatteryBadge from "./BatteryBadge.svelte";
 
   let { devices, loading, onopen }: { devices: Device[]; loading: boolean; onopen: (d: Device) => void } = $props();
+
+  // G HUB's home layout choice; a per-viewer preference.
+  const read = () => {
+    try {
+      return localStorage.getItem("lhub-home-layout") === "list" ? "list" : "grid";
+    } catch {
+      return "grid";
+    }
+  };
+  let layout = $state<"grid" | "list">(read());
+  function setLayout(l: "grid" | "list") {
+    layout = l;
+    try {
+      localStorage.setItem("lhub-home-layout", l);
+    } catch {
+      /* not kept */
+    }
+  }
 </script>
 
 <section class="home">
@@ -13,9 +31,13 @@
   {:else if devices.length === 0}
     <p class="empty">No devices found. Check that your user can open <code>/dev/hidraw*</code>.</p>
   {:else}
-    <div class="grid">
+    <div class="layout" role="group" aria-label="Layout">
+      <button class:active={layout === "grid"} onclick={() => setLayout("grid")} title="Grid" aria-label="Grid">▦</button>
+      <button class:active={layout === "list"} onclick={() => setLayout("list")} title="List" aria-label="List">☰</button>
+    </div>
+    <div class="grid" class:list={layout === "list"}>
       {#each devices as d (d.id)}
-        <div class="card" class:wide={d.kind === "keyboard"}>
+        <div class="card" class:wide={d.kind === "keyboard" && layout === "grid"}>
           <button class="open" onclick={() => onopen(d)} aria-label="Open {d.name}">
             <h2>{d.name}</h2>
             <div class="meta">
@@ -24,9 +46,9 @@
             </div>
             <div class="picture">
               {#if d.caps.includes("lighting")}
-                <LightingViewer device={d} compact size={d.kind === "keyboard" ? 520 : 230} />
+                <LightingViewer device={d} compact size={layout === "list" ? (d.kind === "keyboard" ? 260 : 110) : d.kind === "keyboard" ? 520 : 230} />
               {:else}
-                <DeviceVisual device={d} size={d.kind === "keyboard" ? 520 : 230} />
+                <DeviceVisual device={d} size={layout === "list" ? (d.kind === "keyboard" ? 260 : 110) : d.kind === "keyboard" ? 520 : 230} />
               {/if}
             </div>
           </button>
@@ -48,5 +70,12 @@
   h2 { margin: 0; font-size: 22px; font-weight: 700; }
   .meta { display: flex; gap: 12px; color: var(--text-dim); font-size: 13px; font-weight: 600; }
   .picture { flex: 1; min-height: 240px; display: grid; place-items: center; color: var(--text-dim); padding-top: 10px; }
+  .layout { display: flex; justify-content: flex-end; gap: 4px; max-width: 1500px; margin: 0 auto 14px; }
+  .layout button { padding: 4px 9px; font-size: 14px; color: var(--text-dim); }
+  .layout button.active { color: var(--accent); border-color: var(--accent); }
+  .grid.list { grid-template-columns: 1fr; gap: 10px; max-width: 900px; }
+  .grid.list .open { flex-direction: row; align-items: center; padding: 14px 20px; gap: 20px; }
+  .grid.list h2 { font-size: 17px; flex: 1; }
+  .grid.list .picture { flex: none; min-height: 0; padding: 0; order: -1; width: 270px; }
   @media (max-width: 760px) { .card.wide { grid-column: span 1; } }
 </style>

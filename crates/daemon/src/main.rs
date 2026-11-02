@@ -180,6 +180,23 @@ fn main() {
     let manager = shared.clone();
     std::thread::spawn(move || manage(manager));
     shared.0.lock().unwrap().switch_profile();
+    let watcher = shared.clone();
+    std::thread::spawn(move || {
+        let mut last = app::lock_keys();
+        loop {
+            std::thread::sleep(Duration::from_millis(250));
+            let now = app::lock_keys();
+            if now != last && watcher.0.lock().unwrap().config.app.lock_notifications {
+                if now.0 != last.0 {
+                    app::notify_lock("Caps Lock", now.0);
+                }
+                if now.1 != last.1 {
+                    app::notify_lock("Num Lock", now.1);
+                }
+            }
+            last = now;
+        }
+    });
     let focuser = shared.clone();
     std::thread::spawn(move || {
         for (class, _caption) in focus_rx {

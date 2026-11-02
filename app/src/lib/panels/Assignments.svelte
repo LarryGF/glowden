@@ -12,7 +12,7 @@
   let timer: ReturnType<typeof setInterval> | undefined;
 
   // Editor state for the selected button.
-  let kind = $state<"default" | Action["type"]>("default");
+  let kind = $state<"default" | "system" | Action["type"]>("default");
   let keys = $state<string[]>([]);
   let capturing = $state(false);
   let button = $state("BTN_LEFT");
@@ -22,6 +22,42 @@
   let sound = $state("");
   let steps = $state<({ keys: string[] } | { ms: number })[]>([]);
   let special = $state("KEY_PLAYPAUSE");
+
+  // Common desktop actions, as the shortcuts KDE Plasma and most apps use.
+  const SYSTEM: { group: string; label: string; keys: string[] }[] = [
+    { group: "Edit", label: "Copy", keys: ["KEY_LEFTCTRL", "KEY_C"] },
+    { group: "Edit", label: "Paste", keys: ["KEY_LEFTCTRL", "KEY_V"] },
+    { group: "Edit", label: "Cut", keys: ["KEY_LEFTCTRL", "KEY_X"] },
+    { group: "Edit", label: "Undo", keys: ["KEY_LEFTCTRL", "KEY_Z"] },
+    { group: "Edit", label: "Redo", keys: ["KEY_LEFTCTRL", "KEY_LEFTSHIFT", "KEY_Z"] },
+    { group: "Edit", label: "Select all", keys: ["KEY_LEFTCTRL", "KEY_A"] },
+    { group: "Media", label: "Play / pause", keys: ["KEY_PLAYPAUSE"] },
+    { group: "Media", label: "Next track", keys: ["KEY_NEXTSONG"] },
+    { group: "Media", label: "Previous track", keys: ["KEY_PREVIOUSSONG"] },
+    { group: "Media", label: "Stop", keys: ["KEY_STOPCD"] },
+    { group: "Media", label: "Volume up", keys: ["KEY_VOLUMEUP"] },
+    { group: "Media", label: "Volume down", keys: ["KEY_VOLUMEDOWN"] },
+    { group: "Media", label: "Mute", keys: ["KEY_MUTE"] },
+    { group: "Media", label: "Microphone mute", keys: ["KEY_MICMUTE"] },
+    { group: "Desktop", label: "Switch window", keys: ["KEY_LEFTALT", "KEY_TAB"] },
+    { group: "Desktop", label: "Close window", keys: ["KEY_LEFTALT", "KEY_F4"] },
+    { group: "Desktop", label: "Show desktop", keys: ["KEY_LEFTMETA", "KEY_D"] },
+    { group: "Desktop", label: "Overview", keys: ["KEY_LEFTMETA", "KEY_W"] },
+    { group: "Desktop", label: "Next virtual desktop", keys: ["KEY_LEFTCTRL", "KEY_LEFTMETA", "KEY_RIGHT"] },
+    { group: "Desktop", label: "Previous virtual desktop", keys: ["KEY_LEFTCTRL", "KEY_LEFTMETA", "KEY_LEFT"] },
+    { group: "Desktop", label: "Lock screen", keys: ["KEY_LEFTMETA", "KEY_L"] },
+    { group: "Desktop", label: "Screenshot", keys: ["KEY_SYSRQ"] },
+    { group: "Browser", label: "Back", keys: ["KEY_BACK"] },
+    { group: "Browser", label: "Forward", keys: ["KEY_FORWARD"] },
+    { group: "Browser", label: "New tab", keys: ["KEY_LEFTCTRL", "KEY_T"] },
+    { group: "Browser", label: "Close tab", keys: ["KEY_LEFTCTRL", "KEY_W"] },
+    { group: "Browser", label: "Reopen closed tab", keys: ["KEY_LEFTCTRL", "KEY_LEFTSHIFT", "KEY_T"] },
+    { group: "Browser", label: "Zoom in", keys: ["KEY_LEFTCTRL", "KEY_EQUAL"] },
+    { group: "Browser", label: "Zoom out", keys: ["KEY_LEFTCTRL", "KEY_MINUS"] },
+    { group: "Apps", label: "Calculator", keys: ["KEY_CALC"] },
+  ];
+  let system = $state(0);
+  const systemName = (k: string[]) => SYSTEM.find((x) => x.keys.join() === k.join())?.label;
 
   async function load() {
     try {
@@ -64,7 +100,7 @@
   function describe(a: Action | undefined): string {
     if (!a) return "Default";
     switch (a.type) {
-      case "keys": return a.keys.map(keyLabel).join(" + ");
+      case "keys": return systemName(a.keys) ?? a.keys.map(keyLabel).join(" + ");
       case "macro": return `Macro (${a.steps.length} steps)`;
       case "mouse_button": return keyLabel(a.button);
       case "scroll": return `Scroll ${a.direction}`;
@@ -79,6 +115,11 @@
     selected = n;
     const a = info?.assignments[String(n)];
     kind = a?.type ?? "default";
+    const sys = a?.type === "keys" ? SYSTEM.findIndex((x) => x.keys.join() === a.keys.join()) : -1;
+    if (sys >= 0) {
+      kind = "system";
+      system = sys;
+    }
     keys = a?.type === "keys" ? [...a.keys] : [];
     button = a?.type === "mouse_button" ? a.button : "BTN_LEFT";
     direction = a?.type === "scroll" ? a.direction : "up";
@@ -130,6 +171,7 @@
   function build(): Action | null {
     switch (kind) {
       case "default": return null;
+      case "system": return { type: "keys", keys: SYSTEM[system].keys };
       case "keys": return keys.length ? { type: "keys", keys } : null;
       case "macro": return { type: "macro", steps: steps.filter((s) => !("keys" in s) || s.keys.length) };
       case "mouse_button": return { type: "mouse_button", button };
@@ -155,6 +197,7 @@
 
   const kinds: { key: typeof kind; label: string }[] = [
     { key: "default", label: "Default" },
+    { key: "system", label: "System action" },
     { key: "keys", label: "Key / shortcut" },
     { key: "macro", label: "Macro" },
     { key: "mouse_button", label: "Mouse button" },
@@ -196,7 +239,17 @@
           {/each}
         </div>
 
-        {#if kind === "keys"}
+        {#if kind === "system"}
+          <select bind:value={system}>
+            {#each [...new Set(SYSTEM.map((x) => x.group))] as g}
+              <optgroup label={g}>
+                {#each SYSTEM.map((x, i) => ({ ...x, i })).filter((x) => x.group === g) as x}
+                  <option value={x.i}>{x.label} ({x.keys.map(keyLabel).join(" + ")})</option>
+                {/each}
+              </optgroup>
+            {/each}
+          </select>
+        {:else if kind === "keys"}
           <div class="row">
             <button class="capture" class:active={capturing} onclick={() => startCapture("keys")}>
               {capturing ? "Press the keys…" : keys.length ? keys.map(keyLabel).join(" + ") : "Click, then press the shortcut"}

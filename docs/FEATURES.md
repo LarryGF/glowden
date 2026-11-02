@@ -105,7 +105,7 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Lua scripting | planned | |
 | Import/export profiles | built | JSON file in your home folder |
 | Sound samples (play audio clips from a key or button) | built | G HUB's 59 clips imported with readable names; "Play a sound" button action |
-| System actions library (open apps, shortcuts, media) | planned | Built-in `MACRO_PLAYBACK` cards |
+| System actions library (open apps, shortcuts, media) | built | "System action" in assignments: our own list of edit, media, desktop (KDE shortcuts), browser and app actions; "Run a program" opens apps |
 | Settings backup and restore | built | Settings page: back up, restore, delete |
 
 ## Not applicable
@@ -138,9 +138,10 @@ and the mouse shows its unencrypted product card plus a zone strip.
 |---|---|---|
 | Start on login | built | Settings page toggles the systemd user unit (writes one for dev builds) |
 | Notifications: low battery | built | Desktop notification at 15 %, once per discharge; general and Caps/Num lock still planned |
-| Notifications: general, Caps/Num lock | planned | `notifications_enabled`, `low_battery_notifications_enabled`, `lock_notifications_enabled` |
+| Notifications: Caps/Num lock | built | Off by default; reads the kernel keyboard LEDs (`/sys/class/leds/*::capslock`) |
+| Notifications: general | planned | `notifications_enabled`, `low_battery_notifications_enabled`, `lock_notifications_enabled` |
 | Language | planned | UI is English only |
-| Home layout (grid/list) | planned | `home_layout` |
+| Home layout (grid/list) | built | Toggle on the home page, kept per viewer |
 | Tray icon with device list and battery | built | Battery per device, profile switching, open/quit; closing the window keeps lhub in the tray |
 | Analytics, accounts, device recommendations | n/a | |
 | G HUB data folders: scan and import | built | Settings page: pictures, LED layouts, VO!CE engine and presets (reads settings.db) |

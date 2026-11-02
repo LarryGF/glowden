@@ -79,6 +79,41 @@ pub fn notify(title: &str, body: &str) {
         .spawn();
 }
 
+/// Caps Lock and Num Lock state from the kernel's keyboard LEDs (on if any keyboard shows it).
+pub fn lock_keys() -> (bool, bool) {
+    let mut caps = false;
+    let mut num = false;
+    for e in std::fs::read_dir("/sys/class/leds")
+        .into_iter()
+        .flatten()
+        .flatten()
+    {
+        let name = e.file_name().to_string_lossy().to_string();
+        let on =
+            || std::fs::read_to_string(e.path().join("brightness")).is_ok_and(|b| b.trim() != "0");
+        if name.ends_with("::capslock") {
+            caps |= on();
+        } else if name.ends_with("::numlock") {
+            num |= on();
+        }
+    }
+    (caps, num)
+}
+
+pub fn notify_lock(what: &str, on: bool) {
+    let _ = Command::new("notify-send")
+        .args([
+            "--app-name=lhub",
+            "--icon=input-keyboard",
+            "--expire-time=1500",
+            "--transient",
+        ])
+        .arg(format!("{what} {}", if on { "on" } else { "off" }))
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+}
+
 /// Whether the user's graphical session is locked (logind `LockedHint`, set by the desktop's
 /// screen locker).
 pub fn session_locked() -> bool {

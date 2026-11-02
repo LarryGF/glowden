@@ -315,6 +315,9 @@ pub struct AppSettings {
     /// Red breathing on devices with a low battery (G HUB's low-battery effect).
     #[serde(default = "yes")]
     pub low_battery_lighting: bool,
+    /// Desktop notification when Caps Lock or Num Lock changes (G HUB `lock_notifications_enabled`).
+    #[serde(default)]
+    pub lock_notifications: bool,
 }
 
 impl Default for AppSettings {
@@ -325,6 +328,7 @@ impl Default for AppSettings {
             lighting_off_when_locked: true,
             swap_mouse_buttons: false,
             low_battery_lighting: true,
+            lock_notifications: false,
         }
     }
 }
