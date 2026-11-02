@@ -38,11 +38,22 @@ struct State {
     /// Window classes focused lately, newest first, for linking apps to profiles.
     recent: Vec<String>,
     focused: Option<String>,
+    /// Devices showing the low-battery effect.
+    low_battery: std::collections::HashSet<String>,
 }
 
 impl State {
     fn effective(&self, id: &str) -> DeviceConfig {
-        self.config.effective(id, self.active.as_deref())
+        let mut cfg = self.config.effective(id, self.active.as_deref());
+        if self.low_battery.contains(id) && cfg.lighting.is_some() {
+            cfg.lighting = Some(Lighting::Breathing {
+                color: "#ff1010".into(),
+                speed: 40,
+                intensity: 100,
+            });
+            cfg.power = Some(true);
+        }
+        cfg
     }
 
     /// Re-applies every connected device after the active profile changed.
@@ -128,6 +139,7 @@ fn main() {
             active: None,
             recent: Vec::new(),
             focused: None,
+            low_battery: Default::default(),
         }),
         Condvar::new(),
     ));
@@ -194,6 +206,33 @@ fn manage(shared: Shared) {
                     st.config.devices.entry(id).or_default().dpi_level = Some(level);
                 }
                 st.config.save();
+            }
+            // Low-battery lighting: on at 15 % (not charging), off once charging or above 20 %.
+            let changes: Vec<(String, bool)> = st
+                .workers
+                .iter()
+                .filter_map(|(id, h)| {
+                    let b = h.view.lock().unwrap().battery.clone()?;
+                    let low = st.low_battery.contains(id);
+                    let now = st.config.app.low_battery_lighting
+                        && if low {
+                            !b.charging && b.percent <= 20
+                        } else {
+                            !b.charging && b.percent <= 15
+                        };
+                    (now != low).then(|| (id.clone(), now))
+                })
+                .collect();
+            for (id, low) in changes {
+                if low {
+                    st.low_battery.insert(id.clone());
+                } else {
+                    st.low_battery.remove(&id);
+                }
+                let cfg = st.effective(&id);
+                if let Some(h) = st.workers.get(&id) {
+                    let _ = h.tx.send(Cmd::Apply(cfg));
+                }
             }
             if st.config.app.low_battery_alert {
                 for (id, h) in &st.workers {
@@ -339,6 +378,26 @@ enum Request {
         preset: Option<String>,
     },
     VoiceTestStop,
+    LightingPresets,
+    SaveLightingPreset {
+        name: String,
+        lighting: Lighting,
+    },
+    DeleteLightingPreset {
+        name: String,
+    },
+    ExportLightingPresets,
+    ImportLightingPresets {
+        path: String,
+    },
+    Backups,
+    SaveBackup,
+    RestoreBackup {
+        name: String,
+    },
+    DeleteBackup {
+        name: String,
+    },
     Profiles,
     SetActiveProfile {
         name: Option<String>,
@@ -489,6 +548,82 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
             lock.lock().unwrap().voice.stop_test();
             Ok(Value::Null)
         }
+        Request::LightingPresets => Ok(json!(lock.lock().unwrap().config.lighting_presets)),
+        Request::SaveLightingPreset { name, lighting } => {
+            let mut st = lock.lock().unwrap();
+            let name = name.trim().to_string();
+            if name.is_empty() {
+                return Err("give the preset a name".into());
+            }
+            let presets = &mut st.config.lighting_presets;
+            match presets.iter_mut().find(|p| p.name == name) {
+                Some(p) => p.lighting = lighting,
+                None => presets.push(config::LightingPreset { name, lighting }),
+            }
+            st.config.save();
+            Ok(json!(st.config.lighting_presets))
+        }
+        Request::DeleteLightingPreset { name } => {
+            let mut st = lock.lock().unwrap();
+            st.config.lighting_presets.retain(|p| p.name != name);
+            st.config.save();
+            Ok(json!(st.config.lighting_presets))
+        }
+        Request::ExportLightingPresets => {
+            let st = lock.lock().unwrap();
+            let file = PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
+                .join("lhub-lighting-presets.json");
+            std::fs::write(
+                &file,
+                serde_json::to_vec_pretty(&st.config.lighting_presets).unwrap(),
+            )
+            .map_err(|e| e.to_string())?;
+            Ok(json!(file.display().to_string()))
+        }
+        Request::ImportLightingPresets { path } => {
+            let bytes = std::fs::read(&path).map_err(|e| format!("{path}: {e}"))?;
+            let list: Vec<config::LightingPreset> =
+                serde_json::from_slice(&bytes).map_err(|e| format!("{path}: {e}"))?;
+            let mut st = lock.lock().unwrap();
+            for mut p in list {
+                while st.config.lighting_presets.iter().any(|q| q.name == p.name) {
+                    p.name.push_str(" (imported)");
+                }
+                st.config.lighting_presets.push(p);
+            }
+            st.config.save();
+            Ok(json!(st.config.lighting_presets))
+        }
+        Request::Backups => Ok(backups()),
+        Request::SaveBackup => {
+            let st = lock.lock().unwrap();
+            st.config.save();
+            let secs = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            std::fs::create_dir_all(backup_dir()).map_err(|e| e.to_string())?;
+            std::fs::copy(config::path(), backup_dir().join(format!("{secs}.json")))
+                .map_err(|e| e.to_string())?;
+            Ok(backups())
+        }
+        Request::RestoreBackup { name } => {
+            let file = backup_dir().join(format!("{}.json", name.trim_end_matches(".json")));
+            let bytes = std::fs::read(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+            let restored: Config = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+            let mut st = lock.lock().unwrap();
+            st.config = restored;
+            st.config.save();
+            st.active = None;
+            st.switch_profile();
+            st.apply_all();
+            Ok(backups())
+        }
+        Request::DeleteBackup { name } => {
+            let file = backup_dir().join(format!("{}.json", name.trim_end_matches(".json")));
+            std::fs::remove_file(file).map_err(|e| e.to_string())?;
+            Ok(backups())
+        }
         Request::Profiles => Ok(profiles(&lock.lock().unwrap())),
         Request::SetActiveProfile { name } => {
             let mut st = lock.lock().unwrap();
@@ -593,8 +728,12 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
         Request::AppSettings => Ok(app_settings(&lock.lock().unwrap())),
         Request::SetAppSettings { settings } => {
             let mut st = lock.lock().unwrap();
+            let swap_changed = st.config.app.swap_mouse_buttons != settings.swap_mouse_buttons;
             st.config.app = settings;
             st.config.save();
+            if swap_changed {
+                st.apply_all();
+            }
             Ok(app_settings(&st))
         }
         Request::SetAutostart { on } => app::set_autostart(on).map(|_| json!(app::autostart())),
@@ -975,6 +1114,7 @@ fn buttons(st: &State, id: &str) -> Result<Value, String> {
         "assignments": assignments,
         "keys": keys::NAMES.iter().map(|(n, _)| *n).collect::<Vec<_>>(),
         "uinput": uinput::shared().err(),
+        "sounds": sounds(),
     }))
 }
 
@@ -994,4 +1134,43 @@ fn profiles(st: &State) -> Value {
         "focused": st.focused,
         "recent": st.recent,
     })
+}
+
+/// Imported sound clips as (category/name, path).
+fn sounds() -> Vec<Value> {
+    let dir = PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
+        .join(".local/share/lhub/sounds");
+    let mut out = Vec::new();
+    for cat in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+        for f in std::fs::read_dir(cat.path())
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
+            let name = format!(
+                "{} / {}",
+                cat.file_name().to_string_lossy(),
+                f.path().file_stem().unwrap_or_default().to_string_lossy()
+            );
+            out.push(json!({ "name": name, "file": f.path().display().to_string() }));
+        }
+    }
+    out.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+    out
+}
+
+fn backup_dir() -> PathBuf {
+    config::path().with_file_name("backups")
+}
+
+/// Saved copies of the whole configuration, newest first; names are Unix times.
+fn backups() -> Value {
+    let mut names: Vec<u64> = std::fs::read_dir(backup_dir())
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.path().file_stem()?.to_str()?.parse().ok())
+        .collect();
+    names.sort_unstable_by(|a, b| b.cmp(a));
+    json!(names.iter().map(|n| n.to_string()).collect::<Vec<_>>())
 }

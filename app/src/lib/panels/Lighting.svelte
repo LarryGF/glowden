@@ -61,11 +61,10 @@
 
   const swatches = ["#ff2a2a", "#ff8a00", "#ffd400", "#2dd4bf", "#2f7bff", "#8b5cf6", "#ff3ea5", "#ffffff"];
 
-  onMount(async () => {
-    try {
-      const cfg = await api.getConfig(device.id);
-      const l = cfg.lighting;
-      if (l) {
+  /** Puts saved lighting into the controls. */
+  function show(l: Lighting) {
+    {
+      {
         if (l.effect === "freestyle") {
           freestyle.base = l.base;
           freestyle.keys = { ...l.keys };
@@ -88,6 +87,38 @@
           if (l.effect === "visualizer") ({ low: color, high: peak, background: base } = l);
         }
       }
+    }
+  }
+
+  let saved = $state<{ name: string; lighting: Lighting }[]>([]);
+  let presetName = $state("");
+  let presetMessage = $state("");
+  /** Saved presets this device can show (live effects need per-key lighting, and so on). */
+  const usable = $derived(
+    saved.filter(({ lighting: l }) =>
+      l.effect === "freestyle" ? canPaint : l.effect === "firmware" ? options.some((o) => o.key === `fw:${l.id}`) : options.some((o) => o.key === l.effect) || l.effect === "ripple",
+    ),
+  );
+  function applyPreset(l: Lighting) {
+    show(l);
+    if (l.effect === "freestyle") pushFreestyle();
+    else push();
+  }
+  async function savePreset() {
+    try {
+      const l = tab === "freestyle" ? ({ effect: "freestyle", base: freestyle.base, keys: { ...freestyle.keys } } as Lighting) : lighting();
+      saved = await api.saveLightingPreset(presetName, l);
+      presetName = "";
+    } catch (e) {
+      onerror(e);
+    }
+  }
+
+  onMount(async () => {
+    api.lightingPresets().then((p) => (saved = p)).catch(() => {});
+    try {
+      const cfg = await api.getConfig(device.id);
+      if (cfg.lighting) show(cfg.lighting);
       if (cfg.brightness !== undefined) brightness = cfg.brightness;
       power = cfg.power ?? true;
     } catch (e) {
@@ -226,6 +257,32 @@
 
   </div>
 
+  <section>
+    <h3>My presets</h3>
+    {#if usable.length}
+      <div class="effects">
+        {#each usable as p}
+          <span class="mine">
+            <button onclick={() => applyPreset(p.lighting)}>{p.name}</button>
+            <button class="x" onclick={async () => (saved = await api.deleteLightingPreset(p.name))} aria-label="Delete {p.name}">✕</button>
+          </span>
+        {/each}
+      </div>
+    {/if}
+    <div class="save-row">
+      <input placeholder="Save current lighting as…" bind:value={presetName} onkeydown={(e) => e.key === "Enter" && presetName.trim() && savePreset()} />
+      <button onclick={savePreset} disabled={!presetName.trim()}>Save</button>
+    </div>
+    <div class="save-row">
+      <button class="ghost" onclick={async () => (presetMessage = `Saved to ${await api.exportLightingPresets()}`)}>Export all</button>
+      <button class="ghost" onclick={async () => {
+        const path = prompt("Path of a presets file to import");
+        if (path) saved = await api.importLightingPresets(path).catch((e) => (onerror(e), saved));
+      }}>Import…</button>
+    </div>
+    {#if presetMessage}<span class="note">{presetMessage}</span>{/if}
+  </section>
+
   {#if tab === "presets" && !effect.startsWith("fw:")}
     <div class="sync">
       <button onclick={sync} disabled={!power}>Sync lighting to all devices</button>
@@ -250,6 +307,12 @@
   .switch { min-width: 64px; border-radius: 999px; font-weight: 700; }
   .switch.on { background: var(--text); color: var(--bg); border-color: transparent; }
   .sync { display: flex; flex-direction: column; gap: 8px; }
+  .mine { display: flex; }
+  .mine button:first-child { flex: 1; text-align: left; padding: 10px 12px; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .mine .x { border-top-left-radius: 0; border-bottom-left-radius: 0; padding: 0 10px; color: var(--text-dim); }
+  .save-row { display: flex; gap: 8px; }
+  .save-row input { flex: 1; }
+  .ghost { background: none; }
   .tabs { display: flex; gap: 18px; border-bottom: 1px solid var(--line); }
   .tabs button { border: none; background: none; border-radius: 0; padding: 8px 2px; color: var(--text-dim); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; font-size: 12px; }
   .tabs button.active { color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }

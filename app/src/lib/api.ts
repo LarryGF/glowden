@@ -27,7 +27,7 @@ export type VoiceState = {
 };
 
 export type AppInfo = {
-  settings: { ghub_paths: string[]; low_battery_alert: boolean; lighting_off_when_locked: boolean };
+  settings: { ghub_paths: string[]; low_battery_alert: boolean; lighting_off_when_locked: boolean; swap_mouse_buttons: boolean; low_battery_lighting: boolean };
   autostart: boolean;
   drivers: { name: string; file: string; products: string[] }[];
   devices: { id: string; name: string; product: string; kind: string; driver: string | null }[];
@@ -40,6 +40,7 @@ export type Action =
   | { type: "scroll"; direction: string }
   | { type: "dpi"; action: string }
   | { type: "command"; command: string }
+  | { type: "sound"; file: string }
   | { type: "disabled" };
 
 export type ButtonsInfo = {
@@ -48,6 +49,7 @@ export type ButtonsInfo = {
   assignments: Record<string, Action>;
   keys: string[];
   uinput: string | null;
+  sounds: { name: string; file: string }[];
 };
 
 export type ProfilesInfo = {
@@ -145,6 +147,18 @@ export const api = {
   voiceTestStop: () => request<void>({ cmd: "voice_test_stop" }),
   appSettings: () => request<AppInfo>({ cmd: "app_settings" }),
   profiles: () => request<ProfilesInfo>({ cmd: "profiles" }),
+  backups: () => request<string[]>({ cmd: "backups" }),
+  lightingPresets: () => request<{ name: string; lighting: Lighting }[]>({ cmd: "lighting_presets" }),
+  saveLightingPreset: (name: string, lighting: Lighting) =>
+    request<{ name: string; lighting: Lighting }[]>({ cmd: "save_lighting_preset", name, lighting }),
+  deleteLightingPreset: (name: string) =>
+    request<{ name: string; lighting: Lighting }[]>({ cmd: "delete_lighting_preset", name }),
+  exportLightingPresets: () => request<string>({ cmd: "export_lighting_presets" }),
+  importLightingPresets: (path: string) =>
+    request<{ name: string; lighting: Lighting }[]>({ cmd: "import_lighting_presets", path }),
+  saveBackup: () => request<string[]>({ cmd: "save_backup" }),
+  restoreBackup: (name: string) => request<string[]>({ cmd: "restore_backup", name }),
+  deleteBackup: (name: string) => request<string[]>({ cmd: "delete_backup", name }),
   setActiveProfile: (name: string | null) => request<ProfilesInfo>({ cmd: "set_active_profile", name }),
   saveProfile: (name: string, apps: string[], old: string | null = null) =>
     request<ProfilesInfo>({ cmd: "save_profile", name, apps, old }),

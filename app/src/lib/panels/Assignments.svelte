@@ -19,6 +19,7 @@
   let direction = $state("up");
   let dpi = $state("cycle");
   let command = $state("");
+  let sound = $state("");
   let steps = $state<({ keys: string[] } | { ms: number })[]>([]);
   let special = $state("KEY_PLAYPAUSE");
 
@@ -69,6 +70,7 @@
       case "scroll": return `Scroll ${a.direction}`;
       case "dpi": return `DPI ${a.action}`;
       case "command": return `Run: ${a.command}`;
+      case "sound": return `Sound: ${a.file.split("/").pop()?.replace(/\.[^.]+$/, "")}`;
       case "disabled": return "Disabled";
     }
   }
@@ -82,6 +84,7 @@
     direction = a?.type === "scroll" ? a.direction : "up";
     dpi = a?.type === "dpi" ? a.action : "cycle";
     command = a?.type === "command" ? a.command : "";
+    sound = a?.type === "sound" ? a.file : (info?.sounds[0]?.file ?? "");
     steps = a?.type === "macro" ? a.steps.map((s) => ({ ...s })) : [];
   }
 
@@ -133,6 +136,7 @@
       case "scroll": return { type: "scroll", direction };
       case "dpi": return { type: "dpi", action: dpi };
       case "command": return command.trim() ? { type: "command", command: command.trim() } : null;
+      case "sound": return sound ? { type: "sound", file: sound } : null;
       case "disabled": return { type: "disabled" };
     }
   }
@@ -157,6 +161,7 @@
     { key: "scroll", label: "Scroll" },
     { key: "dpi", label: "DPI" },
     { key: "command", label: "Run a program" },
+    { key: "sound", label: "Play a sound" },
     { key: "disabled", label: "Disable" },
   ];
 </script>
@@ -239,6 +244,13 @@
             <option value="cycle">DPI cycle</option>
             <option value="shift">DPI shift (lowest level while held)</option>
           </select>
+        {:else if kind === "sound"}
+          {#if info.sounds.length}
+            <select bind:value={sound}>
+              {#each info.sounds as s}<option value={s.file}>{s.name}</option>{/each}
+            </select>
+          {/if}
+          <input placeholder="or a path to any sound file" bind:value={sound} />
         {:else if kind === "command"}
           <input placeholder="e.g. spectacle -r" bind:value={command} />
         {/if}

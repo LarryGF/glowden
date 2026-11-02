@@ -37,8 +37,9 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Custom effect editor, save/import/export | planned | |
 | Turn off lighting after inactivity | next | RGB `0x8071` fn 7 power settings seen in captures |
 | Lighting off while the PC sleeps / locks | built | Locked session (logind LockedHint) → lights off, restored on unlock; Settings toggle, on by default |
-| Low-battery and power-saving lighting effects | planned | Device settings `LOW_BATTERY_EFFECT`, `POWER_SAVING_EFFECT` |
-| Saved custom effects and presets (save, delete, import, export) | planned | `/lighting/effect/presets/*`, `/lighting/effect/import|export` |
+| Low-battery lighting effect | built | Red breathing at ≤15 % (not charging) until charging or >20 %; Settings toggle |
+| Power-saving lighting effect | planned | Device setting `POWER_SAVING_EFFECT` |
+| Saved custom effects and presets (save, delete, import, export) | built | "My presets" on the Lighting page, usable on any device that can show them |
 | Games driving lighting (LED SDK) | planned | `integration_manager_settings.allowLedSdk`; Proton games would need a bridge DLL |
 | Mouse zone layout | built | Product photo with 8 strip regions; zone order not yet checked on the mouse |
 | LampArray (Windows Dynamic Lighting) | n/a | Windows-only |
@@ -52,7 +53,7 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Default DPI level, DPI shift target, "go to shift" assignment | planned | `/mouse/dpi_default`, `/mouse/dpi_go_to_shift` |
 | Advanced DPI (separate X/Y), DPI correction | planned | `DPI_ADVANCED`, `DPI_CORRECTION` |
 | DPI tester tool | planned | G HUB ships `dpi-tester.min.js` |
-| Left-handed (swap buttons) | planned | App setting `mouse_buttons_swapped` |
+| Left-handed (swap buttons) | built | Settings toggle; swaps buttons 1/2 in the mouse routing |
 | DPI cycle up/down via mouse buttons | built | Button spy `0x8110`, masks in the driver file; not yet pressed on the mouse |
 | Hi-res wheel / wheel mode | next | `0x2121` |
 | Button assignments | built | Host-side via button spy + routing (as G HUB): keys, shortcuts, macros, mouse buttons, scroll, DPI, programs; buttons 7–9 still unnamed |
@@ -103,9 +104,9 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Macros (record, edit, assign) | built | Key/shortcut steps with pauses on mouse buttons; keyboard keys still planned |
 | Lua scripting | planned | |
 | Import/export profiles | built | JSON file in your home folder |
-| Sound samples (play audio clips from a key or button) | planned | `audio_samples` depot, `Generic_Sample_*`, `Expression_Sample_*` |
+| Sound samples (play audio clips from a key or button) | built | G HUB's 59 clips imported with readable names; "Play a sound" button action |
 | System actions library (open apps, shortcuts, media) | planned | Built-in `MACRO_PLAYBACK` cards |
-| Settings backup and restore | planned | `/local_settings_backup/*` |
+| Settings backup and restore | built | Settings page: back up, restore, delete |
 
 ## Not applicable
 

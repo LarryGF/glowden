@@ -400,6 +400,7 @@ fn import_ghub(root: &std::path::Path) -> CmdResult {
         println!("{model}: {} files -> {}", files.len(), dest.display());
     }
     import_voice_engine(root)?;
+    import_sounds(root)?;
     // G HUB's settings (settings.db in %LOCALAPPDATA%\\LGHUB, or an exported settings.json)
     // carry the VO!CE presets.
     if let Some(settings) = find_file(root, &["settings.db", "settings.json"]) {
@@ -420,6 +421,54 @@ fn find_file(dir: &std::path::Path, names: &[&str]) -> Option<std::path::PathBuf
         }
     }
     None
+}
+
+/// G HUB's sound clips (the `audio_samples` package), under readable names in
+/// ~/.local/share/lhub/sounds/<category>/, for the "play a sound" button action.
+fn import_sounds(root: &std::path::Path) -> CmdResult {
+    fn find(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+        for e in std::fs::read_dir(dir).ok()?.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                if p.file_name().is_some_and(|n| n == "audio_samples")
+                    && p.join("manifest.json").exists()
+                {
+                    return Some(p.join("manifest.json"));
+                }
+                if let Some(f) = find(&p) {
+                    return Some(f);
+                }
+            }
+        }
+        None
+    }
+    let Some(manifest) = find(root) else {
+        return Ok(());
+    };
+    let package = manifest.parent().unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&std::fs::read(&manifest)?)?;
+    let dest = std::path::PathBuf::from(std::env::var("HOME")?).join(".local/share/lhub/sounds");
+    let mut count = 0;
+    for r in json["resources"].as_array().into_iter().flatten() {
+        let (Some(key), Some(src)) = (r["key"].as_str(), r["src"].as_str()) else {
+            continue;
+        };
+        // "PRESET_SOUND_FX_CATEGORY#Generic_Sample_AirHorn" → "Sound fx" / "AirHorn"
+        let (category, name) = key.split_once('#').unwrap_or(("Sounds", key));
+        let category = category
+            .trim_start_matches("PRESET_")
+            .trim_end_matches("_CATEGORY")
+            .replace('_', " ");
+        let category = category[..1].to_string() + &category[1..].to_lowercase();
+        let name = name.rsplit("_Sample_").next().unwrap_or(name);
+        let to = dest.join(&category).join(format!("{name}.mp3"));
+        std::fs::create_dir_all(to.parent().unwrap())?;
+        if std::fs::copy(package.join(src), &to).is_ok() {
+            count += 1;
+        }
+    }
+    println!("sounds: {count} clips -> {}", dest.display());
+    Ok(())
 }
 
 fn voice_dir() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {

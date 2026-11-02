@@ -563,6 +563,8 @@ struct Buttons {
     assignments: BTreeMap<u8, Action>,
     /// Unassigned routing (driver file, else factory) and what the mouse has now.
     base: Option<Vec<u8>>,
+    /// Left-handed: buttons 1 and 2 send each other's click.
+    swap: bool,
     routed: Option<Vec<u8>>,
     /// Keys each held button keeps down, released with it.
     holding: HashMap<u8, Vec<u16>>,
@@ -589,6 +591,7 @@ impl Buttons {
             chosen,
             assignments: BTreeMap::new(),
             base: input.routing.clone(),
+            swap: false,
             routed: None,
             holding: HashMap::new(),
             last,
@@ -602,6 +605,7 @@ impl Buttons {
             .unwrap_or(0)
             .min(self.levels.len().saturating_sub(1));
         self.assignments = cfg.assignments.clone();
+        self.swap = cfg.swap_buttons;
         if self.spy.is_none() {
             self.restart(found);
         }
@@ -753,6 +757,14 @@ impl Buttons {
                     .stdin(std::process::Stdio::null())
                     .spawn()
                     .map_err(|e| e.to_string())?;
+            }
+            Action::Sound { file } if down => {
+                std::process::Command::new("pw-play")
+                    .arg(file)
+                    .stdin(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn()
+                    .map_err(|e| format!("cannot play {file}: {e}"))?;
             }
             Action::Macro { steps } if down => {
                 // Played on its own thread so pauses don't hold up the device.

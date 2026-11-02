@@ -8,6 +8,15 @@
   let newPath = $state("");
   let report = $state("");
   let busy = $state("");
+  let backups = $state<string[]>([]);
+  const when = (name: string) => new Date(Number(name) * 1000).toLocaleString();
+  async function backup(p: Promise<string[]>) {
+    try {
+      backups = await p;
+    } catch (e) {
+      onerror(e);
+    }
+  }
 
   async function load() {
     try {
@@ -16,7 +25,10 @@
       onerror(e);
     }
   }
-  onMount(load);
+  onMount(() => {
+    load();
+    backup(api.backups());
+  });
 
   async function save(change: (s: AppInfo["settings"]) => void) {
     if (!info) return;
@@ -147,6 +159,23 @@
     </section>
 
     <section class="card">
+      <h2>Backups</h2>
+      <p class="note">A backup is a copy of all lhub settings: devices, profiles and these app settings.</p>
+      <ul class="paths">
+        {#each backups as b}
+          <li>
+            <span class="path">{when(b)}</span>
+            <button onclick={() => confirm(`Restore the settings from ${when(b)}? Current settings are replaced.`) && backup(api.restoreBackup(b)).then(() => (load(), onchanged()))}>Restore</button>
+            <button class="ghost" onclick={() => backup(api.deleteBackup(b))}>Delete</button>
+          </li>
+        {:else}
+          <li class="empty">No backups yet.</li>
+        {/each}
+      </ul>
+      <div class="add"><button onclick={() => backup(api.saveBackup())}>Back up now</button></div>
+    </section>
+
+    <section class="card">
       <h2>App</h2>
       <label class="row">
         <span>Start the lhub service when you log in</span>
@@ -156,6 +185,18 @@
         <span>Turn device lighting off while the screen is locked</span>
         <button class="switch" class:on={info.settings.lighting_off_when_locked} onclick={() => save((s) => (s.lighting_off_when_locked = !s.lighting_off_when_locked))}>
           {info.settings.lighting_off_when_locked ? "On" : "Off"}
+        </button>
+      </label>
+      <label class="row">
+        <span>Left-handed mouse (swap left and right buttons)</span>
+        <button class="switch" class:on={info.settings.swap_mouse_buttons} onclick={() => save((s) => (s.swap_mouse_buttons = !s.swap_mouse_buttons))}>
+          {info.settings.swap_mouse_buttons ? "On" : "Off"}
+        </button>
+      </label>
+      <label class="row">
+        <span>Breathe red while a device's battery is low (15 %)</span>
+        <button class="switch" class:on={info.settings.low_battery_lighting} onclick={() => save((s) => (s.low_battery_lighting = !s.low_battery_lighting))}>
+          {info.settings.low_battery_lighting ? "On" : "Off"}
         </button>
       </label>
       <label class="row">

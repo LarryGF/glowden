@@ -111,6 +111,9 @@ pub struct DeviceConfig {
     pub report_interval: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub voice: Option<VoiceConfig>,
+    /// From the app settings when applied, not saved per device.
+    #[serde(skip)]
+    pub swap_buttons: bool,
     /// Button number (as the mouse's button spy counts them, from 1) → what it does.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub assignments: BTreeMap<u8, Action>,
@@ -143,6 +146,11 @@ pub enum Action {
     /// A program started on press, through `sh -c`.
     Command {
         command: String,
+    },
+    /// A sound file played on press (G HUB's sound clips are imported into
+    /// ~/.local/share/lhub/sounds).
+    Sound {
+        file: String,
     },
     /// The button does nothing.
     Disabled,
@@ -190,6 +198,15 @@ pub struct Config {
     /// Profile picked by hand (used while automatic switching is off).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_profile: Option<String>,
+    /// Lighting saved by the user to reuse on any device.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lighting_presets: Vec<LightingPreset>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct LightingPreset {
+    pub name: String,
+    pub lighting: Lighting,
 }
 
 /// A profile changes some device settings while active: lighting, brightness, DPI, report
@@ -208,6 +225,7 @@ impl Config {
     /// A device's settings with the active profile's changes on top.
     pub fn effective(&self, id: &str, active: Option<&str>) -> DeviceConfig {
         let mut cfg = self.devices.get(id).cloned().unwrap_or_default();
+        cfg.swap_buttons = self.app.swap_mouse_buttons;
         let Some(over) = active
             .and_then(|name| self.profiles.iter().find(|p| p.name == name))
             .and_then(|p| p.devices.get(id))
@@ -251,6 +269,12 @@ pub struct AppSettings {
     /// Lights off while the session is locked, back on when unlocked (G HUB `lighting_sleep`).
     #[serde(default = "yes")]
     pub lighting_off_when_locked: bool,
+    /// Left-handed: swap the mice's left and right buttons (G HUB `mouse_buttons_swapped`).
+    #[serde(default)]
+    pub swap_mouse_buttons: bool,
+    /// Red breathing on devices with a low battery (G HUB's low-battery effect).
+    #[serde(default = "yes")]
+    pub low_battery_lighting: bool,
 }
 
 impl Default for AppSettings {
@@ -259,6 +283,8 @@ impl Default for AppSettings {
             ghub_paths: Vec::new(),
             low_battery_alert: true,
             lighting_off_when_locked: true,
+            swap_mouse_buttons: false,
+            low_battery_lighting: true,
         }
     }
 }
@@ -267,7 +293,7 @@ fn yes() -> bool {
     true
 }
 
-fn path() -> PathBuf {
+pub fn path() -> PathBuf {
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
