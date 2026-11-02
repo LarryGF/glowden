@@ -88,13 +88,13 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Gain, mute | done | Mute state read back from the mic |
 | Lighting | done | |
 | Blue VO!CE 2 engine | built | Real DTS ClearVoice 2 DLL via a PE loader, as a PipeWire virtual mic, in the glowden-devices `blue-voice` plugin |
-| VO!CE presets → engine parameters | done | Every preset field measured (glowden-devices: plugins/blue-voice/docs/voice.md); the 8 G HUB presets load |
+| VO!CE presets → engine parameters | done | Every preset field measured (private research notes); the 8 G HUB presets load |
 | VO!CE as a PipeWire virtual mic | built | "Yeti GX (Blue VO!CE)"; preset picker in the app; not yet heard by the user |
 | Smart lock | built | G HUB's exact bytes sent with VO!CE changes (`00 05 07 00 ae 00 00 02`) |
 | Blue VO!CE automatic gain control, reference gain | partly | Gain on enable and smart-lock bytes as G HUB sends them; AGC itself unidentified |
 | Mic level meter | built | Raw and processed peaks from the VO!CE plugin (level events every 100 ms) in the VO!CE panel; flags a silent (muted) mic |
 | Blue VO!CE advanced controls | built | Per-stage switches and sliders on top of a preset, applied live |
-| Voice effects (21 presets: delay, flanger/phaser, reverb, ring modulation, pitch/formant voice changer) | built | The DTS effect stages in the ClearVoice 2 DLL, after VO!CE on the virtual mic (also without VO!CE); presets, every G HUB control, preview on the test recording (docs/voice.md). Not yet heard by the user |
+| Voice effects (21 presets: delay, flanger/phaser, reverb, ring modulation, pitch/formant voice changer) | built | The DTS effect stages in the ClearVoice 2 DLL, after VO!CE on the virtual mic (also without VO!CE); presets, every G HUB control, preview on the test recording. Not yet heard by the user |
 
 ## Profiles, assignments, macros
 
@@ -119,7 +119,7 @@ G HUB accounts/community/marketplace, game library (`gl`), Windows audio mixing 
 
 | Package | What it is | Linux equivalent |
 |---|---|---|
-| `driver_audio_apo` | Audio effect plugins: Blue VO!CE 2 (DTS ClearVoice 2), Blue VO!CE 1 (DTS Studio), headset capture/render, speaker render | VO!CE 2 runs via our PE loader (`docs/voice.md`); the headset/speaker plugins target older headsets, not the G522 |
+| `driver_audio_apo` | Audio effect plugins: Blue VO!CE 2 (DTS ClearVoice 2), Blue VO!CE 1 (DTS Studio), headset capture/render, speaker render | VO!CE 2 runs via a PE loader in the glowden-devices blue-voice plugin; the headset/speaker plugins target older headsets, not the G522 |
 | `driver_audio_sampler_apo` | "Audio Sampler": taps playback for the audio visualizer | PipeWire monitor capture (`crates/lighting/src/audio.rs`) |
 | `driver_audio_g522` | INF only: attaches the Audio Sampler to the G522 microphone (mic level, mic test) | PipeWire source monitoring; G522 voice processing is on the headset (Logivoice, HID++ `0x0900`–`0x0908`) |
 | `driver_hid_virtual` | Virtual HID device for key/mouse emulation (macros, remaps) | `/dev/uinput` (needs a udev rule) |
