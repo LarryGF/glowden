@@ -61,6 +61,15 @@ pub enum Lighting {
         #[serde(default = "full")]
         backdrop: u8,
     },
+    /// A color sequence made in the effect editor.
+    Sequence {
+        steps: Vec<SequenceStep>,
+        #[serde(default = "yes")]
+        blend: bool,
+        /// 0 = every key together; up to 100 = the sequence sweeps across the board.
+        #[serde(default)]
+        spread: u8,
+    },
     /// Screen sampler: keys show the screen's colors at their place on the board.
     Screen {
         /// How quickly the lights follow the picture, 1..100.
@@ -98,6 +107,7 @@ impl Lighting {
                 | Lighting::Starlight { .. }
                 | Lighting::Visualizer { .. }
                 | Lighting::Screen { .. }
+                | Lighting::Sequence { .. }
         )
     }
 }
@@ -391,6 +401,13 @@ pub fn period_ms(speed: u8) -> u16 {
 
 fn full() -> u8 {
     100
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct SequenceStep {
+    pub color: String,
+    /// How long the step lasts, 50 ms – 60 s.
+    pub ms: u32,
 }
 
 fn half() -> u8 {

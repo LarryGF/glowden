@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use hidpp::devices::{self, Effect as DeviceEffect, mic};
 use hidpp::discover::Found;
-use lighting::effects::{Pulse, Screen, Starlight, Visualizer, Wave};
+use lighting::effects::{Pulse, Screen, Sequence, Starlight, Visualizer, Wave};
 use lighting::engine::{Effect, Press, Streamer};
 use serde_json::{Value, json};
 
@@ -476,6 +476,24 @@ fn host_effect(l: &Lighting) -> Result<Box<dyn Effect>, String> {
             )
             .map_err(|e| format!("audio capture (pw-record): {e}"))?,
         ),
+        Lighting::Sequence {
+            steps,
+            blend,
+            spread,
+        } => {
+            if steps.is_empty() || steps.len() > 64 {
+                return Err("a sequence needs 1 to 64 steps".into());
+            }
+            let steps = steps
+                .iter()
+                .map(|s| Ok((parse_rgb(&s.color)?, s.ms.clamp(50, 60_000) as f32 / 1000.0)))
+                .collect::<Result<Vec<_>, String>>()?;
+            Box::new(Sequence {
+                steps,
+                blend: *blend,
+                spread: *spread as f32 / 100.0 * 3.0,
+            })
+        }
         Lighting::Screen { speed, boost } => {
             let mut s = Screen::new().map_err(|e| format!("screen capture (lhub-sampler): {e}"))?;
             s.follow = lerp(*speed, 0.05, 0.9);

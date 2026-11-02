@@ -287,3 +287,35 @@ impl Effect for Screen {
         [s[0] as u8, s[1] as u8, s[2] as u8]
     }
 }
+
+/// A user-made color sequence: each step holds its color for its time, optionally blending
+/// into the next. With `spread`, the sequence runs across the board from left to right.
+pub struct Sequence {
+    /// (color, seconds) per step.
+    pub steps: Vec<(Rgb, f32)>,
+    pub blend: bool,
+    /// Seconds of delay from the left edge to the right edge.
+    pub spread: f32,
+}
+
+impl Effect for Sequence {
+    fn color(&mut self, key: &Key, t: f32, _: &[Press], _: Instant) -> Rgb {
+        let total: f32 = self.steps.iter().map(|s| s.1).sum();
+        if self.steps.is_empty() || total <= 0.0 {
+            return [0; 3];
+        }
+        let delay = key.x / crate::layout::SIZE.0 * self.spread;
+        let mut at = (t - delay).rem_euclid(total);
+        for (i, &(color, secs)) in self.steps.iter().enumerate() {
+            if at < secs {
+                if !self.blend {
+                    return color;
+                }
+                let next = self.steps[(i + 1) % self.steps.len()].0;
+                return mix(color, next, at / secs);
+            }
+            at -= secs;
+        }
+        self.steps[0].0
+    }
+}

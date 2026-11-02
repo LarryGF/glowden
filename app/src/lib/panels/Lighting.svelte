@@ -22,6 +22,7 @@
           { key: "starlight", label: "Starlight", group: "live" as const },
           { key: "visualizer", label: "Audio visualizer", group: "live" as const },
           { key: "screen", label: "Screen sampler", group: "live" as const },
+          { key: "sequence", label: "Custom sequence", group: "live" as const },
         ]
       : []),
     ...(device.caps.includes("reactive") ? [{ key: "pulse", label: "Pulse", group: "live" as const }] : []),
@@ -38,6 +39,13 @@
   let fade = $state(40);
   let density = $state(30);
   let boost = $state(0);
+  let steps = $state<{ color: string; ms: number }[]>([
+    { color: "#ff2d55", ms: 1000 },
+    { color: "#2dd4bf", ms: 1000 },
+    { color: "#7c3aed", ms: 1000 },
+  ]);
+  let blend = $state(true);
+  let spread = $state(0);
   let rainbow = $state(false);
   let glow = $state(100);
   let backdrop = $state(100);
@@ -88,6 +96,7 @@
           if (l.effect === "starlight") ({ star: color, sky: base, density } = l);
           if (l.effect === "visualizer") ({ low: color, high: peak, background: base } = l);
           if (l.effect === "screen") ({ boost } = l);
+          if (l.effect === "sequence") ({ steps, blend, spread } = l);
         }
       }
     }
@@ -140,6 +149,7 @@
       case "starlight": return { effect, star: color, sky: base, density, glow, backdrop };
       case "visualizer": return { effect, low: color, high: peak, background: base, glow, backdrop };
       case "screen": return { effect, speed, boost };
+      case "sequence": return { effect, steps: steps.map((s) => ({ ...s })), blend, spread };
       default: return { effect: "fixed", color };
     }
   }
@@ -165,7 +175,7 @@
 
   const current = $derived(options.find((o) => o.key === effect));
   const firmware = $derived(effect.startsWith("fw:"));
-  const hasColor = $derived(effect !== "cycle" && effect !== "wave" && effect !== "screen");
+  const hasColor = $derived(!["cycle", "wave", "screen", "sequence"].includes(effect));
   const hasSpeed = $derived(["breathing", "cycle", "wave", "pulse", "screen"].includes(effect));
   const layered = $derived(["pulse", "starlight", "visualizer"].includes(effect));
   const colorLabel = $derived(
@@ -242,6 +252,25 @@
       <label><span class="label">Ring width <em>{width}</em></span><input type="range" min="1" max="100" bind:value={width} oninput={push} /></label>
       <label><span class="label">Fade time <em>{fade}</em></span><input type="range" min="1" max="100" bind:value={fade} oninput={push} /></label>
       <label class="inline"><input type="checkbox" bind:checked={rainbow} onchange={push} /><span>Rainbow rings</span></label>
+    {/if}
+    {#if effect === "sequence"}
+      <span class="label">Steps</span>
+      <ol class="steps">
+        {#each steps as s, i}
+          <li>
+            <input type="color" bind:value={s.color} oninput={push} aria-label="Step {i + 1} color" />
+            <label class="ms"><input type="number" min="50" max="60000" step="50" bind:value={s.ms} oninput={push} /> ms</label>
+            <button class="ghost" disabled={i === 0} onclick={() => { [steps[i - 1], steps[i]] = [steps[i], steps[i - 1]]; push(); }} aria-label="Move up">↑</button>
+            <button class="ghost" disabled={steps.length <= 1} onclick={() => { steps = steps.filter((_, j) => j !== i); push(); }} aria-label="Remove step">✕</button>
+          </li>
+        {/each}
+      </ol>
+      {#if steps.length < 64}
+        <button onclick={() => { steps = [...steps, { color: steps.at(-1)?.color ?? "#ffffff", ms: 1000 }]; push(); }}>+ Step</button>
+      {/if}
+      <label class="inline"><input type="checkbox" bind:checked={blend} onchange={push} /><span>Blend into the next step</span></label>
+      <label><span class="label">Sweep across the board <em>{spread}</em></span><input type="range" min="0" max="100" bind:value={spread} oninput={push} /></label>
+      <p class="note">Save it under "My presets" to keep it, export it or apply it to other devices.</p>
     {/if}
     {#if effect === "screen"}
       <label><span class="label">Color boost <em>{boost}</em></span><input type="range" min="0" max="100" bind:value={boost} oninput={push} /></label>
@@ -342,4 +371,9 @@
   input[type="color"] { width: 38px; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: none; padding: 2px; cursor: pointer; }
   input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
   .note { color: var(--text-faint); font-size: 12px; margin: 0; }
+  .steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
+  .steps li { display: flex; gap: 8px; align-items: center; }
+  .steps .ms { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--text-dim); }
+  .steps .ms input { width: 80px; }
+  .ghost { background: none; border: none; color: var(--text-dim); padding: 2px 6px; }
 </style>

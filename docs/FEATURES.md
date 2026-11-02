@@ -34,7 +34,7 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Screen sampler | built | `lhub-sampler`: ScreenCast portal (restore token, asks once) → PipeWire video → 16×9 color grid; each key shows the screen at its place. One capture shared by all devices. Not yet tried on the desktop |
 | LIGHTSYNC: same effect on all devices | done | Sync skips device-specific effects and devices running one |
 | Palettes (vibrant, pastel, mono, signature, custom) | done | Own palettes plus saved custom colors in the color picker |
-| Custom effect editor, save/import/export | planned | |
+| Custom effect editor, save/import/export | built | "Custom sequence": color steps with durations, blend, sweep across the board; saved/exported through My presets. Not G HUB's per-key keyframe timeline |
 | Turn off lighting after inactivity | blocked | RGB `0x8071` fn 7: G HUB reads `[00]` → `00 00 00 3c 01 2c` and writes `01 00 00 00 3c 01 0e`. G HUB's settings are `inactivity_light_start_after` (power-saving timer) and `inactivity_light_off_after` (lights-off timer), in minutes, but the byte meaning isn't clear without a labeled capture. Host-side idle isn't available either: KWin doesn't support `GetSessionIdleTime` on Wayland |
 | Lighting off while the PC sleeps / locks | built | Locked session (logind LockedHint) → lights off, restored on unlock; Settings toggle, on by default |
 | Low-battery lighting effect | built | Red breathing at ≤15 % (not charging) until charging or >20 %; Settings toggle |
