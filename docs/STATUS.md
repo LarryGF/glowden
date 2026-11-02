@@ -1,6 +1,6 @@
 # Status
 
-Last updated 2026-11-01. Feature-by-feature port status lives in `FEATURES.md`.
+Last updated 2026-11-02. Feature-by-feature port status lives in `FEATURES.md`.
 
 ## Running it
 
@@ -39,7 +39,8 @@ unit (`systemctl --user enable --now lhubd`); the package itself hasn't been tes
 ## Built but not verified
 
 - Audio visualizer effect (capture stream verified; no audio was playing to see bars).
-- Mic mute; mouse live effects (zones laid out in a line until the layout is mapped).
+- Mic mute; mouse live effects and the order of its 8 zones on the photo.
+- Mouse DPI up/down/shift buttons (button spy `0x8110`).
 - Sensitivity UI (backend verified via the socket, UI not opened).
 
 ## Known issues
@@ -48,10 +49,9 @@ unit (`systemctl --user enable --now lhubd`); the package itself hasn't been tes
   that app window closes. Harmless.
 - The G522 drops out of the device list while the headset is off; it should appear as
   "off" instead.
-- DPI cycling with the mouse buttons in host mode needs the button-spy feature (`0x8110`).
 
 ## Device pictures
 
-G HUB's install here has 309 product pictures (older G502/Yeti models among them), but none
-for the G515, G502 X PLUS, G522 or Yeti GX: G HUB downloads those on demand. They are
-never copied into this repo; an import step will read them from the user's own G HUB data.
+Keyboard, mic and headset pictures come from the user's G HUB depots (`lhub import-ghub`);
+the G502 X PLUS ones are encrypted, so it uses Logitech's public product photo, downloaded on
+first use. Neither is copied into this repo. See `adding-devices.md`.

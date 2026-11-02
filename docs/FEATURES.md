@@ -16,7 +16,7 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Background agent that keeps settings applied | done | `lhubd`, systemd user unit |
 | Settings re-applied on reconnect/wake | built | Rescan every 3 s |
 | Multiple devices of the same model | built | Ids are per USB port |
-| Device pictures | planned | Imported at runtime from the user's G HUB install; not in this install for G515/G502 X/G522/Yeti GX |
+| Device pictures | done | G HUB pictures imported at runtime; G502 X PLUS from the public product photo |
 | Firmware update (DFU) | n/a | Excluded on purpose |
 | Receiver pairing / unpairing | planned | `/devices/pairable`, `0x1894` |
 
@@ -26,26 +26,26 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 |---|---|---|
 | Fixed / breathing / color cycle (device effects) | done | Effect index looked up by id per device |
 | Brightness | done | Scaled to each device's maximum; applied to live effects too |
-| Per-key painting (freestyle) | built | Library + CLI; no UI painter yet |
+| Per-key painting (freestyle) | done | Painted on the device picture in the Lighting page |
 | Animated host effects | done | Wave, starlight, pulse (live), visualizer |
 | Firmware reactive ripple (G515 `0x0017`) | done | Verified by user |
 | Other firmware all-zones effects (G515 `0x000c 0x0013 0x0016 0x0018 0x0019`, G502 `0x0004 0x000c 0x000f 0x0010 0x0013`) | next | Parameters partly seen in captures |
 | Audio visualizer | built | PipeWire monitor of default output |
 | Screen sampler | planned | Wayland: needs xdg-desktop-portal screencast |
-| LIGHTSYNC: same effect on all devices | next | |
+| LIGHTSYNC: same effect on all devices | done | Sync skips device-specific effects and devices running one |
 | Palettes (vibrant, pastel, mono, signature, custom) | planned | |
 | Custom effect editor, save/import/export | planned | |
 | Turn off lighting after inactivity | next | RGB `0x8071` fn 7 power settings seen in captures |
-| Mouse zone layout | next | |
+| Mouse zone layout | built | Product photo with 8 strip regions; zone order not yet checked on the mouse |
 | LampArray (Windows Dynamic Lighting) | n/a | Windows-only |
 
 ## Mouse (G502 X PLUS)
 
 | G HUB feature | Status | Notes |
 |---|---|---|
-| DPI levels, default, shift | built | `0x2201` levels + active level in service and UI; shift not yet |
+| DPI levels, default, shift | built | `0x2201` levels + active level in service and UI; shift = lowest level while held |
 | Report rate | done | `0x8060` read/write verified |
-| DPI cycle up/down via mouse buttons | planned | Host mode needs button spy `0x8110` |
+| DPI cycle up/down via mouse buttons | built | Button spy `0x8110`, masks in the driver file; not yet pressed on the mouse |
 | Hi-res wheel / wheel mode | next | `0x2121` |
 | Button assignments | planned | Onboard profiles `0x8100` |
 | Onboard memory mode | planned | Read back before any write |
