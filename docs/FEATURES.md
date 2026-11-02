@@ -141,7 +141,7 @@ and the mouse shows its unencrypted product card plus a zone strip.
 | Notifications: general, Caps/Num lock | planned | `notifications_enabled`, `low_battery_notifications_enabled`, `lock_notifications_enabled` |
 | Language | planned | UI is English only |
 | Home layout (grid/list) | planned | `home_layout` |
-| Tray icon with device list, DPI and battery | planned | `/system_tray/*` |
+| Tray icon with device list and battery | built | Battery per device, profile switching, open/quit; closing the window keeps lhub in the tray |
 | Analytics, accounts, device recommendations | n/a | |
 | G HUB data folders: scan and import | built | Settings page: pictures, LED layouts, VO!CE engine and presets (reads settings.db) |
 | Add a device (starter definition) | built | Settings page writes `~/.local/share/lhub/drivers/<device>.toml` |
