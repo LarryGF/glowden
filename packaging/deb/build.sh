@@ -16,7 +16,9 @@ git -C "$root" archive --format=tar HEAD | docker run --rm -i \
     cd app
     pnpm install --frozen-lockfile
     pnpm tauri build --bundles deb --config ../packaging/deb/tauri.deb.json
-    cp /build/target/release/bundle/deb/*.deb /out/
-    chown "$HOST_UID:$HOST_GID" /out/*.deb
+    deb=$(ls /build/target/release/bundle/deb/*.deb)
+    version=$(sed -n "s/^version = \"\(.*\)\"/\1/p" /build/Cargo.toml | head -1)
+    cp "$deb" "/out/lhub_${version}_amd64.deb"
+    chown "$HOST_UID:$HOST_GID" "/out/lhub_${version}_amd64.deb"
   '
 ls -l "$root"/dist/*.deb
