@@ -111,6 +111,53 @@ pub struct DeviceConfig {
     pub report_interval: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub voice: Option<VoiceConfig>,
+    /// Button number (as the mouse's button spy counts them, from 1) → what it does.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub assignments: BTreeMap<u8, Action>,
+}
+
+/// What an assigned button does. Keys use Linux names (`KEY_LEFTCTRL`, `BTN_SIDE`, see
+/// keys.rs); held keys and buttons stay down while the button is held.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Action {
+    /// A key or shortcut, e.g. ["KEY_LEFTCTRL", "KEY_C"].
+    Keys {
+        keys: Vec<String>,
+    },
+    /// Keys pressed and released in order, with optional pauses.
+    Macro {
+        steps: Vec<MacroStep>,
+    },
+    MouseButton {
+        button: String,
+    },
+    /// One wheel notch per press: "up", "down", "left" or "right".
+    Scroll {
+        direction: String,
+    },
+    /// "up", "down", "cycle" or "shift" (lowest level while held).
+    Dpi {
+        action: String,
+    },
+    /// A program started on press, through `sh -c`.
+    Command {
+        command: String,
+    },
+    /// The button does nothing.
+    Disabled,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(untagged)]
+pub enum MacroStep {
+    /// Press and release one key or shortcut.
+    Keys {
+        keys: Vec<String>,
+    },
+    Pause {
+        ms: u32,
+    },
 }
 
 /// Blue VO!CE: the virtual microphone and the preset it runs.

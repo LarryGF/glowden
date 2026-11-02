@@ -126,7 +126,24 @@ dpi_shift = 0x0010   # held: lowest level; released: back to the current one
 ```
 
 To find the masks, capture G HUB while pressing each button (see below). The mouse reports
-`11 <index> <spy index> 00 <mask hi> <mask lo> …` on press and `… 00 00` on release.
+`11 <index> <spy index> 00 <mask hi> <mask lo> …` on press and `… 00 00` on release;
+button n is bit n−1.
+
+The same feature lets the Assignments page give any button another job (a key or shortcut,
+a macro, a mouse button, scrolling, DPI, a program). An assigned button is told to send
+nothing to the PC, and lhub performs its action through a virtual input device
+(`/dev/uinput`, see `packaging/udev`). Name the buttons and set what unassigned buttons send:
+
+```toml
+[input]
+routing = [1, 2, 3, 4, 0, 5, 0, 0, 0, 0, 0]   # button n → PC button (0 = host handles it)
+
+[[button]]
+number = 4
+label = "Back"
+```
+
+Button numbers can be found with "Detect button" on the Assignments page.
 
 ## Firmware effects
 
@@ -175,6 +192,9 @@ In this order; a later file wins for the same product id:
 | `[[layout.photo.led]]` `zone`, `path` | LED regions on the photo |
 | `input.reactive` | Key presses drive reactive effects |
 | `input.dpi_up`, `.dpi_down`, `.dpi_shift` | Button-spy masks of host-handled DPI buttons |
+| `input.routing` | What each button sends to the PC when unassigned |
+| `[[button]]` `number`, `label` | Button names on the Assignments page |
+| `[voice]` `source`, `description` | Blue VO!CE: PipeWire source to process, virtual mic name |
 | `[[firmware_effect]]` | Firmware effects |
 
 ## Probing and captures

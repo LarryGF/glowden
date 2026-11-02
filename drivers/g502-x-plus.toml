@@ -9,6 +9,9 @@ ghub_model = "g502x_plus"
 dpi_up = 0x0200
 dpi_down = 0x0400
 dpi_shift = 0x0010
+# G HUB's routing: back/forward reach the PC as buttons 4 and 5 (what browsers use); DPI
+# shift, DPI up/down and buttons 7–9 are left to the host.
+routing = [1, 2, 3, 4, 0, 5, 0, 0, 0, 0, 0]
 
 [layout]
 # Offline fallback: our own outline, with LED geometry from the imported metadata.json.
@@ -59,3 +62,37 @@ path = "M517 850 L1046 850 L1046 1297 L745 1218 L732 1211 L621 1093 L538 948 L53
 [[layout.photo.led]]
 zone = 8
 path = "M1046 1413 L1046 1761 L596 1761 L719 1548 L857 1442 Z"
+
+# Button-spy numbers (0x8110). 1–6, 10 and 11 from a G HUB capture: G HUB routes 4 and 6 to
+# the PC's back/forward buttons and handles 5, 10 and 11 itself. 7–9 are unidentified.
+[[button]]
+number = 1
+label = "Left click"
+
+[[button]]
+number = 2
+label = "Right click"
+
+[[button]]
+number = 3
+label = "Middle click"
+
+[[button]]
+number = 4
+label = "Back"
+
+[[button]]
+number = 5
+label = "DPI shift"
+
+[[button]]
+number = 6
+label = "Forward"
+
+[[button]]
+number = 10
+label = "DPI up"
+
+[[button]]
+number = 11
+label = "DPI down"

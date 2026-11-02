@@ -47,7 +47,6 @@
   .open:hover { background: none; }
   h2 { margin: 0; font-size: 22px; font-weight: 700; }
   .meta { display: flex; gap: 12px; color: var(--text-dim); font-size: 13px; font-weight: 600; }
-  .meta .low { color: var(--warn); }
   .picture { flex: 1; min-height: 240px; display: grid; place-items: center; color: var(--text-dim); padding-top: 10px; }
   @media (max-width: 760px) { .card.wide { grid-column: span 1; } }
 </style>

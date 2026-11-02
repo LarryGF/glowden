@@ -104,6 +104,10 @@ pub fn build(f: &mut Found, driver: Option<&crate::drivers::Driver>) -> DeviceVi
     if has(0x1b05) || has(features::ONBOARD_PROFILES) {
         caps.push("assignments");
     }
+    if has(0x8110) {
+        // Mouse buttons can be assigned on the host through the button spy.
+        caps.push("buttons");
+    }
 
     let battery = (has(features::UNIFIED_BATTERY) || centurion && has(devices::CENTURION_BATTERY))
         .then(|| devices::battery(dev).ok())

@@ -28,6 +28,23 @@ export type AppInfo = {
   devices: { id: string; name: string; product: string; kind: string; driver: string | null }[];
 };
 
+export type Action =
+  | { type: "keys"; keys: string[] }
+  | { type: "macro"; steps: ({ keys: string[] } | { ms: number })[] }
+  | { type: "mouse_button"; button: string }
+  | { type: "scroll"; direction: string }
+  | { type: "dpi"; action: string }
+  | { type: "command"; command: string }
+  | { type: "disabled" };
+
+export type ButtonsInfo = {
+  labels: Record<string, string>;
+  last: { button: number; ago_ms: number } | null;
+  assignments: Record<string, Action>;
+  keys: string[];
+  uinput: string | null;
+};
+
 export type Kind = "microphone" | "headset" | "keyboard" | "mouse" | "device";
 
 export interface Device {
@@ -112,6 +129,9 @@ export const api = {
   voiceTestPlay: (preset: string | null) => request<void>({ cmd: "voice_test_play", preset }),
   voiceTestStop: () => request<void>({ cmd: "voice_test_stop" }),
   appSettings: () => request<AppInfo>({ cmd: "app_settings" }),
+  buttons: (id: string) => request<ButtonsInfo>({ cmd: "buttons", id }),
+  setAssignment: (id: string, button: number, action: Action | null) =>
+    request<void>({ cmd: "set_assignment", id, button, action }),
   setAppSettings: (settings: AppInfo["settings"]) => request<AppInfo>({ cmd: "set_app_settings", settings }),
   setAutostart: (on: boolean) => request<boolean>({ cmd: "set_autostart", on }),
   importGhub: (path: string) => request<string>({ cmd: "import_ghub", path }),

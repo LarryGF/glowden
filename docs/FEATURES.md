@@ -55,7 +55,7 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 | Left-handed (swap buttons) | planned | App setting `mouse_buttons_swapped` |
 | DPI cycle up/down via mouse buttons | built | Button spy `0x8110`, masks in the driver file; not yet pressed on the mouse |
 | Hi-res wheel / wheel mode | next | `0x2121` |
-| Button assignments | planned | Onboard profiles `0x8100` |
+| Button assignments | built | Host-side via button spy + routing (as G HUB): keys, shortcuts, macros, mouse buttons, scroll, DPI, programs; buttons 7–9 still unnamed |
 | Onboard memory mode | planned | Read back before any write |
 
 ## Keyboard (G515 LS TKL)
@@ -99,7 +99,7 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 |---|---|---|
 | Profiles per application, auto switching | planned | Active-window tracking on KDE Wayland via KWin |
 | Persistent features (settings shared across profiles) | planned | |
-| Macros (record, edit, assign) | planned | Host macros need `/dev/uinput` access |
+| Macros (record, edit, assign) | built | Key/shortcut steps with pauses on mouse buttons; keyboard keys still planned |
 | Lua scripting | planned | |
 | Import/export profiles | planned | |
 | Sound samples (play audio clips from a key or button) | planned | `audio_samples` depot, `Generic_Sample_*`, `Expression_Sample_*` |

@@ -5,6 +5,8 @@ mod app;
 mod battery;
 mod config;
 mod drivers;
+mod keys;
+mod uinput;
 mod view;
 mod voice;
 mod worker;
@@ -21,7 +23,7 @@ use std::time::Duration;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use config::{AppSettings, Config, DeviceConfig, Lighting, VoiceConfig};
+use config::{Action, AppSettings, Config, DeviceConfig, Lighting, VoiceConfig};
 use worker::{Cmd, Handle};
 
 struct State {
@@ -268,6 +270,14 @@ enum Request {
         preset: Option<String>,
     },
     VoiceTestStop,
+    Buttons {
+        id: String,
+    },
+    SetAssignment {
+        id: String,
+        button: u8,
+        action: Option<Action>,
+    },
     AppSettings,
     SetAppSettings {
         settings: AppSettings,
@@ -383,6 +393,15 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
             lock.lock().unwrap().voice.stop_test();
             Ok(Value::Null)
         }
+        Request::Buttons { id } => buttons(&lock.lock().unwrap(), &id),
+        Request::SetAssignment { id, button, action } => update(shared, &id, |c| match action {
+            Some(a) => {
+                c.assignments.insert(button, a);
+            }
+            None => {
+                c.assignments.remove(&button);
+            }
+        }),
         Request::AppSettings => Ok(app_settings(&lock.lock().unwrap())),
         Request::SetAppSettings { settings } => {
             let mut st = lock.lock().unwrap();
@@ -663,4 +682,41 @@ fn create_driver(shared: &Shared, id: &str) -> Result<Value, String> {
     // Dropping the worker closes the device; the manager finds it again with the new file.
     st.workers.remove(id);
     Ok(json!(file.display().to_string()))
+}
+
+/// The mouse's buttons for the Assignments panel: names, what each does, the last one
+/// pressed (for "press the button you want to change"), and the key names actions can use.
+fn buttons(st: &State, id: &str) -> Result<Value, String> {
+    let h = st.workers.get(id).ok_or("no such device")?;
+    let product = {
+        let v = h.view.lock().unwrap();
+        u16::from_str_radix(v.product.rsplit(':').next().unwrap_or(""), 16).ok()
+    };
+    let labels: serde_json::Map<String, Value> = product
+        .and_then(|p| st.drivers.for_product(p))
+        .map(|d| {
+            d.buttons
+                .iter()
+                .map(|b| (b.number.to_string(), json!(b.label)))
+                .collect()
+        })
+        .unwrap_or_default();
+    let last = h
+        .last_button
+        .lock()
+        .unwrap()
+        .map(|(n, at)| json!({ "button": n, "ago_ms": at.elapsed().as_millis() as u64 }));
+    let assignments = st
+        .config
+        .devices
+        .get(id)
+        .map(|c| json!(c.assignments))
+        .unwrap_or_else(|| json!({}));
+    Ok(json!({
+        "labels": labels,
+        "last": last,
+        "assignments": assignments,
+        "keys": keys::NAMES.iter().map(|(n, _)| *n).collect::<Vec<_>>(),
+        "uinput": uinput::shared().err(),
+    }))
 }

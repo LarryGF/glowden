@@ -8,6 +8,7 @@
   import Planned from "./panels/Planned.svelte";
   import Sensitivity from "./panels/Sensitivity.svelte";
   import Voice from "./panels/Voice.svelte";
+  import Assignments from "./panels/Assignments.svelte";
 
   let { device, onerror }: { device: Device; onerror: (e: unknown) => void } = $props();
 
@@ -25,9 +26,11 @@
       : []),
     ...(device.caps.includes("sidetone") ? [{ key: "sidetone", label: "Sidetone", planned: "Feature 0x0604, coming with the G522 work." }] : []),
     ...(device.caps.includes("dpi") ? [{ key: "dpi", label: "Sensitivity" }] : []),
-    ...(device.caps.includes("assignments")
-      ? [{ key: "assign", label: "Assignments", planned: "Button and key remapping, coming with the keyboard and mouse work." }]
-      : []),
+    ...(device.caps.includes("buttons")
+      ? [{ key: "assign", label: "Assignments" }]
+      : device.caps.includes("assignments")
+        ? [{ key: "assign", label: "Assignments", planned: "Key remapping for keyboards is next; mouse buttons can already be assigned." }]
+        : []),
     { key: "info", label: "Info" },
   ]);
 
@@ -73,6 +76,8 @@
         <Lighting {device} {onerror} />
       {:else if active === "mic"}
         <Microphone {device} {onerror} />
+      {:else if active === "assign"}
+        <Assignments {device} {onerror} />
       {:else if active === "voice"}
         <Voice {device} {onerror} />
       {:else if active === "dpi"}

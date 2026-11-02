@@ -22,6 +22,9 @@ pub struct Driver {
     #[serde(default, rename = "firmware_effect")]
     pub firmware_effects: Vec<FirmwareEffect>,
     pub voice: Option<VoiceDef>,
+    /// Names for the mouse's buttons, by button-spy number.
+    #[serde(default, rename = "button")]
+    pub buttons: Vec<ButtonDef>,
     /// Directory of the definition file, for paths inside it.
     #[serde(skip)]
     pub dir: PathBuf,
@@ -63,6 +66,12 @@ pub struct LedRegion {
     pub path: String,
 }
 
+#[derive(Deserialize, Clone, Debug)]
+pub struct ButtonDef {
+    pub number: u8,
+    pub label: String,
+}
+
 /// Blue VO!CE for this device: which PipeWire source the engine processes.
 #[derive(Deserialize, Clone, Debug)]
 pub struct VoiceDef {
@@ -82,6 +91,9 @@ pub struct Input {
     pub dpi_down: Option<u16>,
     /// Held: lowest DPI level; released: back to the current level.
     pub dpi_shift: Option<u16>,
+    /// What each spy-numbered button sends to the PC when unassigned (0 = handled by the
+    /// host). Factory routing (button n → n) when unset.
+    pub routing: Option<Vec<u8>>,
 }
 
 /// An effect that runs in the device firmware, addressed by effect id on a cluster.

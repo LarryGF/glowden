@@ -1,6 +1,7 @@
 //! One thread per device. It owns the device handle, applies configuration, runs
 //! host-rendered animations, and exits when the device goes away.
 
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
@@ -12,7 +13,9 @@ use lighting::effects::{Pulse, Starlight, Visualizer, Wave};
 use lighting::engine::{Effect, Press, Streamer};
 use serde_json::{Value, json};
 
-use crate::config::{DeviceConfig, Lighting, layer_rgb, lerp, parse_rgb, period_ms};
+use crate::config::{
+    Action, DeviceConfig, Lighting, MacroStep, layer_rgb, lerp, parse_rgb, period_ms,
+};
 use crate::drivers::Driver;
 use crate::view::{self, DeviceView};
 
@@ -36,6 +39,8 @@ pub struct Handle {
     pub lights: Arc<Mutex<LightState>>,
     /// DPI level last chosen with the mouse's own buttons, for the service to save.
     pub dpi_level: Arc<Mutex<Option<usize>>>,
+    /// Last mouse button pressed (spy numbering) and when.
+    pub last_button: Arc<Mutex<Option<(u8, Instant)>>>,
 }
 
 #[derive(Default, Clone, serde::Serialize)]
@@ -69,19 +74,21 @@ pub fn spawn(mut found: Found, config: DeviceConfig, driver: Option<Driver>) -> 
         ..Default::default()
     }));
     let dpi_level = Arc::new(Mutex::new(None));
+    let last_button = Arc::new(Mutex::new(None));
     let handle = Handle {
         tx: tx.clone(),
         view: view.clone(),
         alive: alive.clone(),
         lights: lights.clone(),
         dpi_level: dpi_level.clone(),
+        last_button: last_button.clone(),
     };
     let _ = tx.send(Cmd::Apply(config));
     std::thread::Builder::new()
         .name(format!("dev {}", found.id))
         .spawn(move || {
             let id = found.id.clone();
-            if let Err(e) = run(found, rx, view, lights, dpi_level, driver) {
+            if let Err(e) = run(found, rx, view, lights, dpi_level, last_button, driver) {
                 eprintln!("{id}: worker stopped: {e}");
             }
             alive.store(false, Ordering::Relaxed);
@@ -96,10 +103,11 @@ fn run(
     view: Arc<Mutex<DeviceView>>,
     lights: Arc<Mutex<LightState>>,
     dpi_level: Arc<Mutex<Option<usize>>>,
+    last_button: Arc<Mutex<Option<(u8, Instant)>>>,
     driver: Option<Driver>,
 ) -> Result<(), String> {
     let driver = driver.as_ref();
-    let mut dpi = DpiButtons::new(driver, dpi_level);
+    let mut dpi = Buttons::new(driver, dpi_level, last_button);
     let mut anim: Option<Animation> = None;
     let mut last_battery = Instant::now();
 
@@ -527,36 +535,53 @@ fn coalesce(first: Cmd, rx: &Receiver<Cmd>) -> Vec<Cmd> {
     latest_apply.into_iter().chain(others).collect()
 }
 
-/// DPI up/down/shift buttons, handled here because host mode leaves them to the host.
-struct DpiButtons {
+/// Mouse buttons handled on the host, through the button spy (0x8110): assigned buttons are
+/// silenced on the mouse (its button routing, as G HUB does) and performed here, and the DPI
+/// buttons host mode leaves to the host step through the DPI levels.
+struct Buttons {
     up: u16,
     down: u16,
     shift: u16,
     /// Feature index of the button spy once started.
     spy: Option<u8>,
+    count: u8,
     levels: Vec<u16>,
     level: usize,
     held: u16,
     chosen: Arc<Mutex<Option<usize>>>,
+    assignments: BTreeMap<u8, Action>,
+    /// Unassigned routing (driver file, else factory) and what the mouse has now.
+    base: Option<Vec<u8>>,
+    routed: Option<Vec<u8>>,
+    /// Keys each held button keeps down, released with it.
+    holding: HashMap<u8, Vec<u16>>,
+    /// Last button pressed, for the app's "press the button" detection.
+    last: Arc<Mutex<Option<(u8, Instant)>>>,
 }
 
-impl DpiButtons {
-    fn new(driver: Option<&Driver>, chosen: Arc<Mutex<Option<usize>>>) -> DpiButtons {
+impl Buttons {
+    fn new(
+        driver: Option<&Driver>,
+        chosen: Arc<Mutex<Option<usize>>>,
+        last: Arc<Mutex<Option<(u8, Instant)>>>,
+    ) -> Buttons {
         let input = driver.map(|d| d.input.clone()).unwrap_or_default();
-        DpiButtons {
+        Buttons {
             up: input.dpi_up.unwrap_or(0),
             down: input.dpi_down.unwrap_or(0),
             shift: input.dpi_shift.unwrap_or(0),
             spy: None,
+            count: 0,
             levels: Vec::new(),
             level: 0,
             held: 0,
             chosen,
+            assignments: BTreeMap::new(),
+            base: input.routing.clone(),
+            routed: None,
+            holding: HashMap::new(),
+            last,
         }
-    }
-
-    fn wanted(&self) -> bool {
-        self.up | self.down | self.shift != 0 && !self.levels.is_empty()
     }
 
     fn configure(&mut self, found: &mut Found, cfg: &DeviceConfig) {
@@ -565,21 +590,57 @@ impl DpiButtons {
             .dpi_level
             .unwrap_or(0)
             .min(self.levels.len().saturating_sub(1));
+        self.assignments = cfg.assignments.clone();
         if self.spy.is_none() {
             self.restart(found);
         }
+        self.route(found);
     }
 
+    /// Starts the spy on mice that have it; also after the mouse slept or reconnected.
     fn restart(&mut self, found: &mut Found) {
-        if !self.wanted() {
+        if found.device.feature(devices::buttons::SPY).is_err() {
             return;
         }
         match devices::buttons::start_spy(&mut found.device) {
-            Ok(index) => self.spy = Some(index),
+            Ok(index) => {
+                self.spy = Some(index);
+                self.count = devices::buttons::count(&mut found.device).unwrap_or(0);
+                self.routed = devices::buttons::remapping(&mut found.device).ok();
+                self.route(found);
+            }
             Err(e) => {
                 eprintln!("{}: button spy: {e}", found.id);
                 self.spy = None;
             }
+        }
+    }
+
+    /// Assigned buttons send nothing to the PC; the rest keep the base routing. Written only
+    /// when the mouse has something else.
+    fn route(&mut self, found: &mut Found) {
+        if self.spy.is_none() || self.count == 0 {
+            return;
+        }
+        let map: Vec<u8> = (1..=self.count)
+            .map(|n| {
+                let base = self
+                    .base
+                    .as_ref()
+                    .and_then(|b| b.get(n as usize - 1).copied());
+                if self.assignments.contains_key(&n) {
+                    0
+                } else {
+                    base.unwrap_or(n)
+                }
+            })
+            .collect();
+        if self.routed.as_ref() == Some(&map) {
+            return;
+        }
+        match devices::buttons::set_remapping(&mut found.device, &map) {
+            Ok(()) => self.routed = Some(map),
+            Err(e) => eprintln!("{}: button routing: {e}", found.id),
         }
     }
 
@@ -592,32 +653,165 @@ impl DpiButtons {
             let pressed = mask & !self.held;
             let released = self.held & !mask;
             self.held = mask;
-            let last = self.levels.len() - 1;
-            let target = if pressed & self.shift != 0 {
-                Some(0)
-            } else if released & self.shift != 0 {
-                Some(self.level)
-            } else if pressed & self.up != 0 {
-                self.level = (self.level + 1).min(last);
-                *self.chosen.lock().unwrap() = Some(self.level);
-                Some(self.level)
-            } else if pressed & self.down != 0 {
-                self.level = self.level.saturating_sub(1);
-                *self.chosen.lock().unwrap() = Some(self.level);
-                Some(self.level)
+            for n in 1..=16u8 {
+                let bit = 1u16 << (n - 1);
+                if pressed & bit != 0 {
+                    *self.last.lock().unwrap() = Some((n, Instant::now()));
+                    self.button(found, n, bit, true);
+                } else if released & bit != 0 {
+                    self.button(found, n, bit, false);
+                }
+            }
+        }
+    }
+
+    fn button(&mut self, found: &mut Found, n: u8, bit: u16, down: bool) {
+        let action = self.assignments.get(&n).cloned().or_else(|| {
+            // Unassigned DPI buttons keep their usual job.
+            let dpi = |a: &str| Some(Action::Dpi { action: a.into() });
+            if bit & self.up != 0 {
+                dpi("up")
+            } else if bit & self.down != 0 {
+                dpi("down")
+            } else if bit & self.shift != 0 {
+                dpi("shift")
             } else {
                 None
-            };
-            // On its onboard profile the mouse steps DPI itself.
-            if !found.device.host_mode() {
-                continue;
             }
-            if let Some(l) = target
-                && let Err(e) =
-                    devices::mouse::set_dpi(&mut found.device, self.levels[l], l as u8 + 1)
-            {
-                eprintln!("{}: dpi button: {e}", found.id);
+        });
+        let Some(action) = action else { return };
+        if let Action::Dpi { action } = &action {
+            self.dpi(found, action, down);
+            return;
+        }
+        if let Err(e) = self.perform(n, &action, down) {
+            eprintln!("{}: button {n}: {e}", found.id);
+        }
+    }
+
+    fn perform(&mut self, n: u8, action: &Action, down: bool) -> Result<(), String> {
+        let codes = |names: &[String]| -> Result<Vec<u16>, String> {
+            names
+                .iter()
+                .map(|k| crate::keys::code(k).ok_or_else(|| format!("unknown key {k}")))
+                .collect()
+        };
+        match action {
+            Action::Keys { keys } => {
+                let input = crate::uinput::shared()?;
+                let mut input = input.lock().unwrap();
+                if down {
+                    let codes = codes(keys)?;
+                    for &c in &codes {
+                        input.key(c, true).map_err(|e| e.to_string())?;
+                    }
+                    self.holding.insert(n, codes);
+                } else if let Some(codes) = self.holding.remove(&n) {
+                    for &c in codes.iter().rev() {
+                        input.key(c, false).map_err(|e| e.to_string())?;
+                    }
+                }
             }
+            Action::MouseButton { button } => {
+                let code = codes(std::slice::from_ref(button))?[0];
+                let input = crate::uinput::shared()?;
+                input
+                    .lock()
+                    .unwrap()
+                    .key(code, down)
+                    .map_err(|e| e.to_string())?;
+            }
+            Action::Scroll { direction } if down => {
+                let (axis, notches) = match direction.as_str() {
+                    "up" => (crate::uinput::REL_WHEEL, 1),
+                    "down" => (crate::uinput::REL_WHEEL, -1),
+                    "left" => (crate::uinput::REL_HWHEEL, -1),
+                    "right" => (crate::uinput::REL_HWHEEL, 1),
+                    other => return Err(format!("unknown scroll direction {other}")),
+                };
+                let input = crate::uinput::shared()?;
+                input
+                    .lock()
+                    .unwrap()
+                    .scroll(axis, notches)
+                    .map_err(|e| e.to_string())?;
+            }
+            Action::Command { command } if down => {
+                std::process::Command::new("sh")
+                    .args(["-c", command])
+                    .stdin(std::process::Stdio::null())
+                    .spawn()
+                    .map_err(|e| e.to_string())?;
+            }
+            Action::Macro { steps } if down => {
+                // Played on its own thread so pauses don't hold up the device.
+                let input = crate::uinput::shared()?;
+                let steps: Vec<Result<Vec<u16>, u32>> = steps
+                    .iter()
+                    .map(|s| match s {
+                        MacroStep::Keys { keys } => codes(keys).map(Ok),
+                        MacroStep::Pause { ms } => Ok(Err(*ms)),
+                    })
+                    .collect::<Result<_, _>>()?;
+                std::thread::spawn(move || {
+                    for step in steps {
+                        match step {
+                            Ok(codes) => {
+                                let mut input = input.lock().unwrap();
+                                for &c in &codes {
+                                    let _ = input.key(c, true);
+                                }
+                                for &c in codes.iter().rev() {
+                                    let _ = input.key(c, false);
+                                }
+                            }
+                            Err(ms) => std::thread::sleep(Duration::from_millis(ms as u64)),
+                        }
+                    }
+                });
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn dpi(&mut self, found: &mut Found, action: &str, down: bool) {
+        if self.levels.is_empty() {
+            return;
+        }
+        let last = self.levels.len() - 1;
+        let target = match (action, down) {
+            ("shift", true) => Some(0),
+            ("shift", false) => Some(self.level),
+            ("up", true) => {
+                self.level = (self.level + 1).min(last);
+                Some(self.level)
+            }
+            ("down", true) => {
+                self.level = self.level.saturating_sub(1);
+                Some(self.level)
+            }
+            ("cycle", true) => {
+                self.level = if self.level >= last {
+                    0
+                } else {
+                    self.level + 1
+                };
+                Some(self.level)
+            }
+            _ => None,
+        };
+        if action != "shift" && target.is_some() {
+            *self.chosen.lock().unwrap() = Some(self.level);
+        }
+        // On its onboard profile the mouse steps DPI itself.
+        if !found.device.host_mode() {
+            return;
+        }
+        if let Some(l) = target
+            && let Err(e) = devices::mouse::set_dpi(&mut found.device, self.levels[l], l as u8 + 1)
+        {
+            eprintln!("{}: dpi button: {e}", found.id);
         }
     }
 }

@@ -333,9 +333,26 @@ pub mod buttons {
         dev.feature(SPY)
     }
 
-    /// Pressed-button mask from a spy event, if `msg` is one.
+    /// Pressed-button mask from a spy event, if `msg` is one. Button n is bit n−1.
     pub fn pressed(spy_index: u8, msg: &[u8]) -> Option<u16> {
         (msg[2] == spy_index && msg[3] >> 4 == 0).then(|| u16::from_be_bytes([msg[4], msg[5]]))
+    }
+
+    /// Number of buttons the spy covers (fn0; 11 on the G502 X PLUS).
+    pub fn count(dev: &mut Device) -> Result<u8> {
+        Ok(dev.call(SPY, 0, &[])?[4])
+    }
+
+    /// What each button sends to the PC: entry n−1 is the HID button that physical button n
+    /// reports, 0 = nothing (the host handles it). Fn3; G HUB writes it with fn4.
+    pub fn remapping(dev: &mut Device) -> Result<Vec<u8>> {
+        let n = count(dev)?.min(16) as usize;
+        Ok(dev.call(SPY, 3, &[])?[4..4 + n].to_vec())
+    }
+
+    pub fn set_remapping(dev: &mut Device, map: &[u8]) -> Result<()> {
+        dev.call(SPY, 4, &map[..map.len().min(16)])?;
+        Ok(())
     }
 }
 

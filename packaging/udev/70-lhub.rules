@@ -5,3 +5,6 @@ SUBSYSTEM=="hidraw", KERNEL=="hidraw*", ATTRS{idVendor}=="046d", TAG+="uaccess"
 
 # Key presses from Logitech keyboards only, for reactive lighting effects.
 SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_KEYBOARD}=="1", ATTRS{idVendor}=="046d", TAG+="uaccess"
+
+# Virtual input device for button assignments (keys, shortcuts, macros sent by lhub).
+KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput"
