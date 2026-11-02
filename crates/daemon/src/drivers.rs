@@ -65,6 +65,11 @@ pub struct Input {
     /// Read key presses from the device's input node for reactive effects.
     #[serde(default)]
     pub reactive: bool,
+    /// Button-spy masks (0x8110) of buttons the host handles while the mouse is in host mode.
+    pub dpi_up: Option<u16>,
+    pub dpi_down: Option<u16>,
+    /// Held: lowest DPI level; released: back to the current level.
+    pub dpi_shift: Option<u16>,
 }
 
 /// An effect that runs in the device firmware, addressed by effect id on a cluster.

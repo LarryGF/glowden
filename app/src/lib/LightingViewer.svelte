@@ -116,6 +116,14 @@
     return state?.zones[String(zone)] ?? "#000000";
   }
 
+  /** Device-run animations are approximated on the LEDs only, not the whole picture. */
+  function animated(): { alpha: number; hue: number } {
+    const t = performance.now();
+    if (animation === "breathing") return { alpha: 0.2 + 0.8 * (0.5 - 0.5 * Math.cos((2 * Math.PI * t) / 3000)), hue: 0 };
+    if (animation === "cycle") return { alpha: 1, hue: ((t / 6000) * 360) % 360 };
+    return { alpha: 1, hue: 0 };
+  }
+
   function draw() {
     if (!canvas || !layout || !photo || !mask || !layer) return;
     const ctx = canvas.getContext("2d")!;
@@ -133,16 +141,33 @@
     lc.globalCompositeOperation = "destination-in";
     lc.drawImage(mask, 0, 0);
 
+    const { alpha, hue } = lit ? animated() : { alpha: 1, hue: 0 };
+    const tint = hue ? ` hue-rotate(${hue}deg)` : "";
     if (lit) {
       ctx.save();
-      ctx.globalAlpha = 0.6;
-      ctx.filter = "blur(5px)";
+      ctx.globalAlpha = 0.6 * alpha;
+      ctx.filter = `blur(5px)${tint}`;
       ctx.drawImage(layer, 0, 0);
       ctx.restore();
     }
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    if (tint) ctx.filter = tint.trim();
     ctx.drawImage(layer, 0, 0);
+    ctx.restore();
   }
 
+  // Animations redraw every frame; other states redraw when the device state is polled.
+  let frame = 0;
+  $effect(() => {
+    if (animation !== "breathing" && animation !== "cycle") return;
+    const tick = () => {
+      draw();
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  });
 
   function paint(e: MouseEvent) {
     if (!freestyle.active || !canvas || !layout) return;
@@ -194,10 +219,11 @@
   .stage { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
   canvas { width: 100%; height: 100%; max-height: 74vh; object-fit: contain; display: block; filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.6)); }
   .painting canvas { cursor: crosshair; }
-  .breathing canvas { animation: breathe 3s ease-in-out infinite; }
-  .cycle canvas { animation: hue 6s linear infinite; }
-  @keyframes breathe { 50% { filter: brightness(0.6) drop-shadow(0 18px 40px rgba(0, 0, 0, 0.6)); } }
-  @keyframes hue { to { filter: hue-rotate(360deg) drop-shadow(0 18px 40px rgba(0, 0, 0, 0.6)); } }
+  /* Devices without a picture: animate the zone dots only. */
+  .breathing .dot { animation: breathe 3s ease-in-out infinite; }
+  .cycle .dot { animation: hue 6s linear infinite; }
+  @keyframes breathe { 50% { opacity: 0.2; } }
+  @keyframes hue { to { filter: hue-rotate(360deg); } }
   .plain { display: grid; place-items: center; color: var(--text-dim); }
   .strip { display: flex; gap: 12px; justify-content: center; }
   .dot { width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 1px solid var(--line); }

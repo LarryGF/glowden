@@ -291,6 +291,26 @@ pub fn set_cluster_effect(
 }
 
 /// Mouse sensor and report rate, decoded from G HUB captures of the G502 X PLUS.
+/// Mouse button spy (0x8110): while started, the mouse reports every button state change as
+/// event 0 with a 16-bit pressed mask, so buttons the host handles (DPI up/down/shift in host
+/// mode) can act. Sequence from a G HUB capture: fn1 start, fn2 stop.
+pub mod buttons {
+    use crate::{Device, Result};
+
+    pub const SPY: u16 = 0x8110;
+
+    /// Starts reporting; returns the feature index events arrive on.
+    pub fn start_spy(dev: &mut Device) -> Result<u8> {
+        dev.call(SPY, 1, &[])?;
+        dev.feature(SPY)
+    }
+
+    /// Pressed-button mask from a spy event, if `msg` is one.
+    pub fn pressed(spy_index: u8, msg: &[u8]) -> Option<u16> {
+        (msg[2] == spy_index && msg[3] >> 4 == 0).then(|| u16::from_be_bytes([msg[4], msg[5]]))
+    }
+}
+
 pub mod mouse {
     use crate::features::ADJUSTABLE_DPI;
     use crate::{Device, Result};

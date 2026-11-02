@@ -98,6 +98,18 @@ fn manage(shared: Shared) {
                 }
                 alive
             });
+            // DPI levels picked with the mouse's buttons are remembered like UI changes.
+            let picked: Vec<(String, usize)> = st
+                .workers
+                .iter()
+                .filter_map(|(id, h)| Some((id.clone(), h.dpi_level.lock().unwrap().take()?)))
+                .collect();
+            if !picked.is_empty() {
+                for (id, level) in picked {
+                    st.config.devices.entry(id).or_default().dpi_level = Some(level);
+                }
+                st.config.save();
+            }
         }
         let known: Vec<String> = shared.0.lock().unwrap().workers.keys().cloned().collect();
         silent.retain(|_, at| at.elapsed() < Duration::from_secs(30));

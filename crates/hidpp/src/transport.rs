@@ -91,6 +91,8 @@ pub struct Device {
     pub(crate) lighting_claimed: bool,
     /// Reply timeout for the current attempt; grows while a sleeping device wakes.
     timeout: Duration,
+    /// Notifications (software id 0) read while waiting for replies, for `take_events`.
+    events: std::collections::VecDeque<[u8; REPLY_LEN]>,
 }
 
 /// Dongle feature that forwards messages to the headset behind a centurion receiver.
@@ -122,6 +124,7 @@ impl Device {
             effect_cache: HashMap::new(),
             lighting_claimed: false,
             timeout: TIMEOUT,
+            events: std::collections::VecDeque::new(),
         };
         if let Framing::Centurion { .. } = framing {
             dev.probe_centurion_addr()?;
@@ -175,20 +178,49 @@ impl Device {
     }
 
     /// Drops input queued before a request, so a late reply to an earlier request can't be
-    /// taken as the answer to this one.
+    /// taken as the answer to this one. Device notifications are kept for `take_events`.
     fn drain(&mut self) -> Result<()> {
-        let mut buf = [0u8; CENTURION_LEN];
         while wait_readable(&self.file, Duration::ZERO)? {
-            let n = self.file.read(&mut buf)?;
-            if debug() {
-                eprintln!(
-                    "{} <- {} (stale, dropped)",
-                    self.info.hidraw.display(),
-                    hex(&buf[..n])
-                );
+            if let Some(msg) = self.read_message(Duration::from_millis(2))? {
+                self.keep_event(msg);
             }
         }
         Ok(())
+    }
+
+    /// Queues `msg` if it's a notification from this device; returns whether it was.
+    fn keep_event(&mut self, msg: [u8; REPLY_LEN]) -> bool {
+        let event = matches!(self.framing, Framing::HidPP { .. })
+            && msg[1] == self.index
+            && msg[2] != 0xff
+            && msg[3] & 0x0f == 0;
+        if event {
+            if self.events.len() >= 64 {
+                self.events.pop_front();
+            }
+            self.events.push_back(msg);
+        }
+        event
+    }
+
+    /// Notifications the device sent, waiting up to `wait` for the first one.
+    /// Each is [report, index, feature index, function << 4, params...].
+    pub fn take_events(&mut self, wait: Duration) -> Result<Vec<[u8; REPLY_LEN]>> {
+        let deadline = Instant::now() + wait;
+        while self.events.is_empty() {
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() && !wait_readable(&self.file, Duration::ZERO)? {
+                break;
+            }
+            match self.read_message(left.max(Duration::from_millis(2)))? {
+                Some(msg) => {
+                    self.keep_event(msg);
+                }
+                None => break,
+            }
+        }
+        self.drain()?;
+        Ok(self.events.drain(..).collect())
     }
 
     /// Reads until the reply to (feature_index, function) arrives.
@@ -214,6 +246,7 @@ impl Device {
             if msg[2] == feature_index && msg[3] == func_sw {
                 return Ok(msg);
             }
+            self.keep_event(msg);
         }
     }
 
@@ -358,6 +391,11 @@ impl Device {
             }
             return Ok(Some(msg));
         }
+    }
+
+    /// Whether lighting (and with it the onboard profile) was handed to the host.
+    pub fn host_mode(&self) -> bool {
+        self.lighting_claimed
     }
 
     pub fn is_centurion(&self) -> bool {

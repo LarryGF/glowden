@@ -237,7 +237,10 @@ pub fn photo_layout(model: &str, photo: &crate::drivers::Photo) -> Option<serde_
         .join(".local/share/lhub/devices")
         .join(model);
     let file = dir.join("product-photo.png");
-    if !file.exists() {
+    let source = dir.join("product-photo.url");
+    // Fetched again when the driver points at a different picture.
+    let current = std::fs::read_to_string(&source).is_ok_and(|u| u.trim() == photo.url);
+    if !file.exists() || !current {
         std::fs::create_dir_all(&dir).ok()?;
         let tmp = file.with_extension("part");
         let ok = std::process::Command::new("curl")
@@ -252,6 +255,7 @@ pub fn photo_layout(model: &str, photo: &crate::drivers::Photo) -> Option<serde_
             return None;
         }
         std::fs::rename(&tmp, &file).ok()?;
+        let _ = std::fs::write(&source, &photo.url);
     }
     let bytes = std::fs::read(&file).ok()?;
     let (w, h) = image_size(&bytes)?;

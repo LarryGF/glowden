@@ -3,6 +3,13 @@ kind = "mouse"
 products = [0x4099]
 ghub_model = "g502x_plus"
 
+# In host mode the mouse leaves its DPI buttons to the host; these are their button-spy
+# (0x8110) masks, from a G HUB capture.
+[input]
+dpi_up = 0x0200
+dpi_down = 0x0400
+dpi_shift = 0x0010
+
 [layout]
 # Offline fallback: our own outline, with LED geometry from the imported metadata.json.
 picture = "pictures/g502-x-plus.svg"
@@ -10,10 +17,11 @@ picture_clip = "M300 190 C 420 60, 970 60, 1090 190 C 1260 430, 1330 900, 1300 1
 
 # Logitech's public product photo, downloaded once on first use and kept in
 # ~/.local/share/lhub/devices/<model>/ (not shipped). crop = x, y, width, height of the mouse.
+# Plain f_png: "q_auto" makes the CDN send a 256-color version with jagged edges.
 # "vivid" cutout: strongly colored pixels inside the LED regions (the lit strip) become
 # openings that show the live zone colors.
 [layout.photo]
-url = "https://resource.logitechg.com/f_png,q_auto/content/dam/gaming/en/products/g502x-plus/2026-update/gallery/g502-x-plus-top-angle-black-gallery-1.png"
+url = "https://resource.logitechg.com/f_png/content/dam/gaming/en/products/g502x-plus/2026-update/gallery/g502-x-plus-top-angle-black-gallery-1.png"
 crop = [716, 198, 1046, 1761]
 cutout = "vivid"
 
