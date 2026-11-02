@@ -83,11 +83,11 @@ hardware) · **next** · **planned** · **n/a** (doesn't apply to your devices o
 
 | G HUB feature | Status | Notes |
 |---|---|---|
-| Gain, mute | done / built | Mute untested |
+| Gain, mute | done | Mute state read back from the mic |
 | Lighting | done | |
-| Blue VO!CE 2 engine | built | Real DTS ClearVoice 2 DLL via our PE loader, offline test only |
-| VO!CE presets → engine parameters | next | |
-| VO!CE as a PipeWire virtual mic | next | |
+| Blue VO!CE 2 engine | built | Real DTS ClearVoice 2 DLL via our PE loader, as a PipeWire virtual mic (`lhub-voice`) |
+| VO!CE presets → engine parameters | done | Every preset field measured (docs/voice.md); the 8 G HUB presets load |
+| VO!CE as a PipeWire virtual mic | built | "Yeti GX (Blue VO!CE)"; preset picker in the app; not yet heard by the user |
 | Smart lock | planned | G HUB byte `0xae` vs ours `0xca` unresolved |
 | Blue VO!CE automatic gain control, reference gain | next | Part of every VO!CE preset |
 | Voice effects (21 presets: delay, flanger/phaser, reverb, ring modulation, pitch/formant voice changer) | planned | `AUDIO_EFFECTS_SETTINGS` cards for `yeti-gx`; engine is the DTS Studio APO in `driver_audio_apo` |

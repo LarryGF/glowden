@@ -5,6 +5,7 @@ mod battery;
 mod config;
 mod drivers;
 mod view;
+mod voice;
 mod worker;
 
 use std::collections::HashMap;
@@ -19,7 +20,7 @@ use std::time::Duration;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use config::{Config, DeviceConfig, Lighting};
+use config::{Config, DeviceConfig, Lighting, VoiceConfig};
 use worker::{Cmd, Handle};
 
 struct State {
@@ -27,6 +28,7 @@ struct State {
     drivers: drivers::Registry,
     workers: HashMap<String, Handle>,
     scanned: bool,
+    voice: voice::Voice,
 }
 
 type Shared = Arc<(Mutex<State>, Condvar)>;
@@ -55,6 +57,7 @@ fn single_instance() -> Option<std::fs::File> {
 
 fn main() {
     let path = socket_path();
+    voice::stop_stale();
     let Some(_lock) = single_instance() else {
         eprintln!("lhubd already running ({})", path.display());
         return;
@@ -70,6 +73,7 @@ fn main() {
             drivers: drivers::Registry::load(),
             workers: HashMap::new(),
             scanned: false,
+            voice: voice::Voice::default(),
         }),
         Condvar::new(),
     ));
@@ -98,6 +102,16 @@ fn manage(shared: Shared) {
                 }
                 alive
             });
+            let gone: Vec<String> = st
+                .config
+                .devices
+                .keys()
+                .filter(|id| !st.workers.contains_key(*id))
+                .cloned()
+                .collect();
+            for id in gone {
+                st.voice.stop(&id);
+            }
             // DPI levels picked with the mouse's buttons are remembered like UI changes.
             let picked: Vec<(String, usize)> = st
                 .workers
@@ -120,7 +134,12 @@ fn manage(shared: Shared) {
             eprintln!("{}: {} connected, applying {:?}", f.id, f.name, cfg);
             let id = f.id.clone();
             let driver = st.drivers.for_product(f.device.info.product).cloned();
-            st.workers.insert(id, worker::spawn(f, cfg, driver));
+            let voice = cfg.voice.clone().filter(|v| v.enabled);
+            st.workers
+                .insert(id.clone(), worker::spawn(f, cfg, driver.clone()));
+            if let (Some(v), Some(def)) = (voice, driver.and_then(|d| d.voice)) {
+                start_voice(&mut st, &id, &def, &v);
+            }
             drop(st);
             shared.1.notify_all();
         });
@@ -161,6 +180,9 @@ enum Request {
         id: String,
         muted: bool,
     },
+    GetMuted {
+        id: String,
+    },
     DeviceImage {
         id: String,
     },
@@ -188,6 +210,14 @@ enum Request {
     SetReportInterval {
         id: String,
         ms: u8,
+    },
+    VoiceState {
+        id: String,
+    },
+    SetVoice {
+        id: String,
+        enabled: bool,
+        preset: Option<String>,
     },
 }
 
@@ -258,8 +288,15 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
         Request::GetGain { id } => ask(shared, &id, Cmd::GetGain),
         Request::SetGain { id, gain } => ask(shared, &id, |tx| Cmd::SetGain(gain, tx)),
         Request::SetMuted { id, muted } => ask(shared, &id, |tx| Cmd::SetMuted(muted, tx)),
+        Request::GetMuted { id } => ask(shared, &id, Cmd::GetMuted),
         Request::SetPower { id, on } => update(shared, &id, |c| c.power = Some(on)),
         Request::SyncLighting { from } => sync_lighting(shared, &from),
+        Request::VoiceState { id } => Ok(voice_state(&mut lock.lock().unwrap(), &id)),
+        Request::SetVoice {
+            id,
+            enabled,
+            preset,
+        } => set_voice(shared, &id, VoiceConfig { enabled, preset }),
         Request::MouseInfo { id } => ask(shared, &id, Cmd::MouseInfo),
         Request::DeviceLayout { id } => {
             // Cloned out so a first-time photo download doesn't hold the state lock.
@@ -398,4 +435,73 @@ fn sync_lighting(shared: &Shared, from: &str) -> Result<Value, String> {
         synced.push(name);
     }
     Ok(json!(synced))
+}
+
+fn voice_def(st: &State, id: &str) -> Option<drivers::VoiceDef> {
+    let product = st.workers.get(id)?.view.lock().unwrap().product.clone();
+    let product = u16::from_str_radix(product.rsplit(':').next()?, 16).ok()?;
+    st.drivers.for_product(product)?.voice.clone()
+}
+
+/// Starts the virtual microphone with the configured preset (the first one by default).
+fn start_voice(st: &mut State, id: &str, def: &drivers::VoiceDef, cfg: &VoiceConfig) {
+    let presets = voice::presets();
+    let chosen = cfg
+        .preset
+        .as_ref()
+        .and_then(|name| presets.iter().find(|(n, _)| n == name))
+        .or(presets.first());
+    let settings = chosen.map(|(_, s)| s.clone()).unwrap_or(Value::Null);
+    st.voice.start(id, def, &settings);
+}
+
+fn voice_state(st: &mut State, id: &str) -> Value {
+    let cfg = st
+        .config
+        .devices
+        .get(id)
+        .and_then(|c| c.voice.clone())
+        .unwrap_or_default();
+    let (running, error) = st.voice.status(id);
+    let presets: Vec<String> = voice::presets().into_iter().map(|(n, _)| n).collect();
+    json!({
+        "supported": voice_def(st, id).is_some(),
+        "engine": voice::engine().is_some(),
+        "presets": presets,
+        "enabled": cfg.enabled,
+        "preset": cfg.preset.or_else(|| presets.first().cloned()),
+        "running": running,
+        "error": error,
+    })
+}
+
+fn set_voice(shared: &Shared, id: &str, cfg: VoiceConfig) -> Result<Value, String> {
+    let (gain, state) = {
+        let mut st = shared.0.lock().unwrap();
+        let def = voice_def(&st, id).ok_or("this device has no Blue VO!CE")?;
+        let previous = st.config.devices.get(id).and_then(|c| c.voice.clone());
+        st.config.devices.entry(id.to_string()).or_default().voice = Some(cfg.clone());
+        st.config.save();
+        if cfg.enabled {
+            start_voice(&mut st, id, &def, &cfg);
+        } else {
+            st.voice.stop(id);
+        }
+        // A newly picked preset brings its input gain, as in G HUB (0.7 → 70 %).
+        let changed = previous.and_then(|p| p.preset) != cfg.preset;
+        let gain = (cfg.enabled && changed)
+            .then(|| {
+                voice::presets()
+                    .into_iter()
+                    .find(|(n, _)| Some(n) == cfg.preset.as_ref())
+                    .and_then(|(_, s)| s["inputGain"].as_f64())
+            })
+            .flatten()
+            .map(|g| (g * 100.0).round().clamp(0.0, 100.0) as u8);
+        (gain, voice_state(&mut st, id))
+    };
+    if let Some(g) = gain {
+        ask(shared, id, |tx| Cmd::SetGain(g, tx))?;
+    }
+    Ok(state)
 }

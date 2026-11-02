@@ -6,6 +6,7 @@
   import Microphone from "./panels/Microphone.svelte";
   import Planned from "./panels/Planned.svelte";
   import Sensitivity from "./panels/Sensitivity.svelte";
+  import Voice from "./panels/Voice.svelte";
 
   let { device, onerror }: { device: Device; onerror: (e: unknown) => void } = $props();
 
@@ -14,9 +15,7 @@
   const sections: Section[] = $derived([
     ...(device.caps.includes("lighting") ? [{ key: "lighting", label: "Lighting" }] : []),
     ...(device.caps.includes("mic_gain") ? [{ key: "mic", label: "Microphone" }] : []),
-    ...(device.caps.includes("blue_voice")
-      ? [{ key: "voice", label: "Blue VO!CE", planned: "Logitech's own VO!CE 2 engine already runs natively in testing. Presets and the virtual microphone come next." }]
-      : []),
+    ...(device.caps.includes("blue_voice") ? [{ key: "voice", label: "Blue VO!CE" }] : []),
     ...(device.caps.includes("equalizer")
       ? [{ key: "eq", label: "Equalizer", planned: "Parametric EQ is exposed by the headset (feature 0x020d); decoding is scheduled with the G522 work." }]
       : []),
@@ -73,6 +72,8 @@
         <Lighting {device} {onerror} />
       {:else if active === "mic"}
         <Microphone {device} {onerror} />
+      {:else if active === "voice"}
+        <Voice {device} {onerror} />
       {:else if active === "dpi"}
         <Sensitivity {device} {onerror} />
       {:else if active === "info"}

@@ -9,6 +9,7 @@
 
   onMount(() => {
     api.getGain(device.id).then((g) => (gain = g)).catch(onerror);
+    api.getMuted(device.id).then((m) => (muted = m)).catch(onerror);
   });
 
   const pushGain = debounce(() => gain !== null && api.setGain(device.id, gain).catch(onerror));
@@ -33,7 +34,6 @@
 
   <div class="mute">
     <button class:on={muted} onclick={toggleMute}>{muted ? "Muted" : "Mute"}</button>
-    <span class="hint">Mute state isn't read back from the mic yet, so this shows only what you set here.</span>
   </div>
 </div>
 

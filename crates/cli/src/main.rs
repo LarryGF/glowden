@@ -5,7 +5,8 @@ use hidpp::features;
 
 const USAGE: &str = "usage:
   lhub list                                  devices and their HID++ features
-  lhub import-ghub <dir>                     copy device pictures/layouts from a G HUB install
+  lhub import-ghub <dir>                     copy device pictures/layouts (and the VO!CE engine) from G HUB depots
+  lhub import-voice-presets <settings.json>  copy the Blue VO!CE presets from G HUB's settings
   lhub <dev> color RRGGBB
   lhub <dev> breathe RRGGBB [period_ms] [intensity%]
   lhub <dev> cycle [period_ms] [intensity%] [saturation]
@@ -22,6 +23,9 @@ fn main() -> ExitCode {
         Some("list") => list(),
         Some("audio-levels") => audio_levels(),
         Some("import-ghub") if args.len() == 2 => import_ghub(std::path::Path::new(&args[1])),
+        Some("import-voice-presets") if args.len() == 2 => {
+            import_voice_presets(std::path::Path::new(&args[1]))
+        }
         Some(dev) if args.len() >= 2 => device_command(dev, &args[1..]),
         _ => Err(USAGE.into()),
     };
@@ -395,5 +399,107 @@ fn import_ghub(root: &std::path::Path) -> CmdResult {
         }
         println!("{model}: {} files -> {}", files.len(), dest.display());
     }
+    import_voice_engine(root)
+}
+
+fn voice_dir() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+    Ok(std::path::PathBuf::from(std::env::var("HOME")?).join(".local/share/lhub/voice"))
+}
+
+/// The Blue VO!CE 2 engine is one of the DLLs embedded in G HUB's audio driver installer
+/// (`driver_audio_apo/ghub_audio_driver_apo.exe`). Each embedded DLL is a complete PE image,
+/// so it can be cut out at its MZ header, up to the end of its last section.
+fn import_voice_engine(root: &std::path::Path) -> CmdResult {
+    fn find(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+        for e in std::fs::read_dir(dir).ok()?.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                if let Some(f) = find(&p) {
+                    return Some(f);
+                }
+            } else if p
+                .file_name()
+                .is_some_and(|n| n == "ghub_audio_driver_apo.exe")
+            {
+                return Some(p);
+            }
+        }
+        None
+    }
+    let Some(installer) = find(root) else {
+        return Ok(());
+    };
+    let data = std::fs::read(&installer)?;
+    let u16_at = |o: usize| {
+        data.get(o..o + 2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]]) as usize)
+    };
+    let u32_at = |o: usize| {
+        data.get(o..o + 4)
+            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize)
+    };
+    // Skip the installer's own header; embedded images start later.
+    for start in (1..data.len().saturating_sub(64)).filter(|&i| data[i..].starts_with(b"MZ")) {
+        let Some(pe) = u32_at(start + 0x3c)
+            .filter(|&o| o < 0x1000)
+            .map(|o| start + o)
+        else {
+            continue;
+        };
+        if data.get(pe..pe + 4) != Some(b"PE\0\0") {
+            continue;
+        }
+        let (Some(sections), Some(optional)) = (u16_at(pe + 6), u16_at(pe + 20)) else {
+            continue;
+        };
+        let table = pe + 24 + optional;
+        let end = (0..sections)
+            .filter_map(|i| Some(u32_at(table + i * 40 + 20)? + u32_at(table + i * 40 + 16)?))
+            .max()
+            .map(|e| start + e);
+        let Some(image) = end.and_then(|e| data.get(start..e)) else {
+            continue;
+        };
+        if image.windows(21).any(|w| w == b"dtsClearVoice2Process") {
+            let dir = voice_dir()?;
+            std::fs::create_dir_all(&dir)?;
+            let to = dir.join("clearvoice2.dll");
+            std::fs::write(&to, image)?;
+            println!(
+                "Blue VO!CE engine: {} bytes -> {}",
+                image.len(),
+                to.display()
+            );
+            return Ok(());
+        }
+    }
+    println!("Blue VO!CE engine: not found in {}", installer.display());
+    Ok(())
+}
+
+/// G HUB keeps its VO!CE presets as BLUE_VOICE_2_SETTINGS cards in settings.json (exported
+/// from its settings.db). They are copied as-is; the service maps them onto the engine.
+fn import_voice_presets(settings: &std::path::Path) -> CmdResult {
+    let json: serde_json::Value = serde_json::from_slice(&std::fs::read(settings)?)?;
+    let presets: Vec<serde_json::Value> = json["cards"]["cards"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|c| c["attribute"] == "BLUE_VOICE_2_SETTINGS")
+        .map(|c| {
+            serde_json::json!({
+                "name": c["name"],
+                "settings": c["blueVoice2Settings"]["settings"],
+            })
+        })
+        .collect();
+    if presets.is_empty() {
+        return Err("no Blue VO!CE presets in that file".into());
+    }
+    let dir = voice_dir()?;
+    std::fs::create_dir_all(&dir)?;
+    let to = dir.join("presets.json");
+    std::fs::write(&to, serde_json::to_vec_pretty(&presets)?)?;
+    println!("{} Blue VO!CE presets -> {}", presets.len(), to.display());
     Ok(())
 }

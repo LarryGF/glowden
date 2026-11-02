@@ -1,5 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export type VoiceState = {
+  supported: boolean;
+  engine: boolean;
+  presets: string[];
+  enabled: boolean;
+  preset: string | null;
+  running: boolean;
+  error: string | null;
+};
+
 export type Kind = "microphone" | "headset" | "keyboard" | "mouse" | "device";
 
 export interface Device {
@@ -76,6 +86,10 @@ const request = <T>(req: Record<string, unknown>) => invoke<T>("request", { req 
 
 export const api = {
   listDevices: () => request<Device[]>({ cmd: "list" }),
+  voiceState: (id: string) => request<VoiceState>({ cmd: "voice_state", id }),
+  setVoice: (id: string, enabled: boolean, preset: string | null) =>
+    request<VoiceState>({ cmd: "set_voice", id, enabled, preset }),
+  getMuted: (id: string) => request<boolean>({ cmd: "get_muted", id }),
   getConfig: (id: string) => request<DeviceConfig>({ cmd: "get_config", id }),
   setLighting: (id: string, lighting: Lighting) => request<void>({ cmd: "set_lighting", id, lighting }),
   setBrightness: (id: string, percent: number) => request<void>({ cmd: "set_brightness", id, percent }),

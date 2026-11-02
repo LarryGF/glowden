@@ -23,6 +23,7 @@ pub enum Cmd {
     GetGain(Reply),
     SetGain(u8, Reply),
     SetMuted(bool, Reply),
+    GetMuted(Reply),
     Release(Reply),
     MouseInfo(Reply),
 }
@@ -221,6 +222,7 @@ fn handle(
         Cmd::GetGain(tx) => reply(tx, mic::gain(dev).map(|g| json!(g))),
         Cmd::SetGain(g, tx) => reply(tx, mic::set_gain(dev, g).map(|_| Value::Null)),
         Cmd::SetMuted(m, tx) => reply(tx, mic::set_muted(dev, m).map(|_| Value::Null)),
+        Cmd::GetMuted(tx) => reply(tx, mic::muted(dev).map(|m| json!(m))),
         Cmd::MouseInfo(tx) => {
             use devices::mouse;
             let info = (|| -> hidpp::Result<Value> {

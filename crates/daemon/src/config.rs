@@ -109,6 +109,16 @@ pub struct DeviceConfig {
     /// Report interval in ms (1 = 1000 Hz).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub report_interval: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub voice: Option<VoiceConfig>,
+}
+
+/// Blue VO!CE: the virtual microphone and the preset it runs.
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
+pub struct VoiceConfig {
+    pub enabled: bool,
+    /// Preset name as imported from G HUB; the first preset when unset or missing.
+    pub preset: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]

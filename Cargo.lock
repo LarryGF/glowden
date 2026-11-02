@@ -1662,6 +1662,14 @@ version = "0.1.0"
 dependencies = [
  "hidpp",
  "lighting",
+ "serde_json",
+]
+
+[[package]]
+name = "lhub-voice"
+version = "0.1.0"
+dependencies = [
+ "cc",
 ]
 
 [[package]]

@@ -21,6 +21,7 @@ pub struct Driver {
     pub input: Input,
     #[serde(default, rename = "firmware_effect")]
     pub firmware_effects: Vec<FirmwareEffect>,
+    pub voice: Option<VoiceDef>,
     /// Directory of the definition file, for paths inside it.
     #[serde(skip)]
     pub dir: PathBuf,
@@ -58,6 +59,15 @@ pub struct LedRegion {
     pub zone: u8,
     /// SVG path in cropped-photo pixels.
     pub path: String,
+}
+
+/// Blue VO!CE for this device: which PipeWire source the engine processes.
+#[derive(Deserialize, Clone, Debug)]
+pub struct VoiceDef {
+    /// Part of the PipeWire node name of the device's microphone.
+    pub source: String,
+    /// Name the virtual microphone gets in sound settings.
+    pub description: String,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]

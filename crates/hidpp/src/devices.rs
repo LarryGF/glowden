@@ -126,6 +126,11 @@ pub mod mic {
         Ok(())
     }
 
+    /// Same register as `set_muted`: 1 = live, 0 = muted (read back from the Yeti GX).
+    pub fn muted(dev: &mut Device) -> Result<bool> {
+        Ok(dev.call(MICROPHONE, 2, &[0x00, 0x00, 0x00])?[7] == 0)
+    }
+
     pub fn set_muted(dev: &mut Device, muted: bool) -> Result<()> {
         dev.call(MICROPHONE, 3, &[0x00, 0x00, if muted { 0 } else { 1 }])?;
         Ok(())
