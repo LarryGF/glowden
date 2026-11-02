@@ -11,5 +11,5 @@ ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo PATH=/opt/cargo/bin:/opt/node/
 RUN curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
 RUN mkdir /opt/node && curl -sSfL https://nodejs.org/dist/v22.20.0/node-v22.20.0-linux-x64.tar.xz \
       | tar -xJ --strip-components=1 -C /opt/node \
-    && corepack enable && corepack prepare pnpm@latest --activate
+    && npm install -g pnpm@12
 WORKDIR /build
