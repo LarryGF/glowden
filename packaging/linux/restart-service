@@ -1,0 +1,17 @@
+#!/bin/sh
+# Run by the package after an install or upgrade: every user's running glowdend switches to
+# the new binaries. A service run by systemd is restarted through that user's systemd; one
+# started by the app is stopped, and the app starts the new one on its next request.
+for dir in /proc/[0-9]*; do
+  [ "$(cat "$dir/comm" 2>/dev/null)" = glowdend ] || continue
+  pid=${dir#/proc/}
+  user=$(stat -c %U "$dir" 2>/dev/null) || continue
+  if grep -q 'glowdend\.service' "$dir/cgroup" 2>/dev/null; then
+    systemctl --user -M "$user@" daemon-reload 2>/dev/null || true
+    systemctl --user -M "$user@" try-restart glowdend.service 2>/dev/null \
+      || kill "$pid" 2>/dev/null || true
+  else
+    kill "$pid" 2>/dev/null || true
+  fi
+done
+exit 0

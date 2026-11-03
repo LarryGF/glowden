@@ -40,6 +40,7 @@
           "/usr/bin/glowden-sampler": "../../target/release/glowden-sampler",
           "/usr/lib/udev/rules.d/70-glowden.rules": "../../packaging/udev/70-glowden.rules",
           "/usr/lib/systemd/user/glowdend.service": "../../packaging/systemd/glowdend.service",
+          "/usr/lib/glowden/restart-service": "../../packaging/linux/restart-service",
           "/usr/share/icons/hicolor/256x256/apps/glowden.png": "icons/icon.png",
           "/usr/share/doc/glowden/LICENSE-MIT": "../../LICENSE-MIT",
           "/usr/share/doc/glowden/LICENSE-APACHE": "../../LICENSE-APACHE",

@@ -4,5 +4,8 @@ post_install() {
   echo "Start the device service for your user with: systemctl --user enable --now glowdend"
 }
 
-post_upgrade() { post_install; }
+post_upgrade() {
+  post_install
+  sh /usr/lib/glowden/restart-service
+}
 post_remove() { post_install; }

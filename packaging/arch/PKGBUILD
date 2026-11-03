@@ -31,6 +31,7 @@ package() {
   install -Dm755 "$root/target/release/glowden-sampler" "$pkgdir/usr/bin/glowden-sampler"
   install -Dm644 "$root/packaging/udev/70-glowden.rules" "$pkgdir/usr/lib/udev/rules.d/70-glowden.rules"
   install -Dm644 "$root/packaging/systemd/glowdend.service" "$pkgdir/usr/lib/systemd/user/glowdend.service"
+  install -Dm755 "$root/packaging/linux/restart-service" "$pkgdir/usr/lib/glowden/restart-service"
   install -Dm644 "$root/packaging/linux/glowden.desktop" "$pkgdir/usr/share/applications/glowden.desktop"
   install -Dm644 "$root/app/src-tauri/icons/icon.png" "$pkgdir/usr/share/icons/hicolor/256x256/apps/glowden.png"
   for size in 32x32 128x128 512x512; do
