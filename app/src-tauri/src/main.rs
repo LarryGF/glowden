@@ -127,11 +127,12 @@ fn tray_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::W
 static TRAY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn show_window(app: &tauri::AppHandle) {
-    use tauri::Manager;
+    use tauri::{Emitter, Manager};
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
+        let _ = w.emit("window-visible", true);
     }
 }
 
@@ -185,6 +186,10 @@ fn main() {
             {
                 api.prevent_close();
                 let _ = window.hide();
+                // WebKitGTK keeps a hidden window's page running; canvas redraws there pile up
+                // GPU buffers nothing presents (~1 GB/min), so the page pauses on this event.
+                use tauri::Emitter;
+                let _ = window.emit("window-visible", false);
             }
         })
         .run(tauri::generate_context!())

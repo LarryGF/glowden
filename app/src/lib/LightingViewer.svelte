@@ -3,6 +3,7 @@
   import { api, type Device, type Layout, type LightState } from "./api";
   import DeviceVisual from "./DeviceVisual.svelte";
   import { freestyle } from "./freestyle.svelte";
+  import { page } from "./visibility.svelte";
 
   let {
     device,
@@ -28,7 +29,7 @@
     loaded = true;
     if (layout) await prepare(layout);
     const poll = () =>
-      api.lightingState(device.id).then((s) => {
+      page.visible && api.lightingState(device.id).then((s) => {
         state = s;
         draw();
       }).catch(() => {});
@@ -125,7 +126,7 @@
   }
 
   function draw() {
-    if (!canvas || !layout || !photo || !mask || !layer) return;
+    if (!canvas || !layout || !photo || !mask || !layer || !page.visible) return;
     const ctx = canvas.getContext("2d")!;
     const lit = live || (freestyle.active && !compact);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -160,7 +161,7 @@
   // Animations redraw every frame; other states redraw when the device state is polled.
   let frame = 0;
   $effect(() => {
-    if (animation !== "breathing" && animation !== "cycle") return;
+    if (!page.visible || (animation !== "breathing" && animation !== "cycle")) return;
     const tick = () => {
       draw();
       frame = requestAnimationFrame(tick);
@@ -190,9 +191,10 @@
   }
 
   $effect(() => {
-    // Redraw when painting mode or the live flag changes.
+    // Redraw when painting mode, the live flag or window visibility changes.
     void freestyle.active;
     void live;
+    void page.visible;
     draw();
   });
 
