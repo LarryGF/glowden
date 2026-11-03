@@ -178,10 +178,23 @@ struct Plugin {
     next: u64,
     replies: Receiver<Value>,
     levels: Levels,
+    binary: PathBuf,
+    /// The program file it was started from, to notice a new version installed over it.
+    file: Option<FileId>,
+    started: Instant,
+}
+
+type FileId = (u64, std::time::SystemTime);
+
+fn file_id(path: &Path) -> Option<FileId> {
+    use std::os::unix::fs::MetadataExt;
+    let m = std::fs::metadata(path).ok()?;
+    Some((m.ino(), m.modified().ok()?))
 }
 
 impl Plugin {
     fn spawn(binary: &Path) -> Result<Plugin, String> {
+        let file = file_id(binary);
         let mut child = Command::new(binary)
             .arg("serve")
             .stdin(Stdio::piped())
@@ -216,6 +229,9 @@ impl Plugin {
             next: 0,
             replies,
             levels,
+            binary: binary.to_path_buf(),
+            file,
+            started: Instant::now(),
         })
     }
 
@@ -310,6 +326,8 @@ pub struct Voice {
     previewing: std::collections::HashSet<String>,
     /// Why the last start for a device failed, for the UI.
     errors: HashMap<String, String>,
+    /// Restarts after a crash or failed start: how many in a row, and when the next may run.
+    retries: HashMap<String, (u32, Instant)>,
 }
 
 impl Voice {
@@ -427,8 +445,38 @@ impl Voice {
     /// Stops everything for a device (it disconnected, or its definition changed).
     pub fn stop(&mut self, id: &str) {
         self.plugins.remove(id);
+        self.retries.remove(id);
         self.live.remove(id);
         self.previewing.remove(id);
+    }
+
+    /// Whether the processed microphone that should be running needs starting (again): its
+    /// plugin crashed or failed to start (retried with growing delays up to a minute), or a
+    /// new version of the plugin was installed since it started (restarted right away).
+    pub fn due(&mut self, id: &str) -> bool {
+        self.status(id);
+        if let Some(p) = self.plugins.get(id) {
+            if file_id(&p.binary) != p.file {
+                eprintln!("{id}: Blue VO!CE plugin updated, restarting it");
+                self.stop(id);
+                self.retries.remove(id);
+                return true;
+            }
+            if self.live.contains(id) {
+                if p.started.elapsed() > Duration::from_secs(60) {
+                    self.retries.remove(id);
+                }
+                return false;
+            }
+        }
+        let now = Instant::now();
+        let (count, next) = self.retries.entry(id.to_string()).or_insert((0, now));
+        if now < *next {
+            return false;
+        }
+        *count += 1;
+        *next = now + Duration::from_secs((1u64 << (*count).min(6)).min(60));
+        true
     }
 
     /// Whether the processed microphone is up; a crashed plugin is noticed and reported.
@@ -436,7 +484,10 @@ impl Voice {
         if let Some(p) = self.plugins.get_mut(id)
             && let Ok(Some(code)) = p.child.try_wait()
         {
-            self.stop(id);
+            // Not stop(): the restart delay keeps growing while it keeps crashing.
+            self.plugins.remove(id);
+            self.live.remove(id);
+            self.previewing.remove(id);
             self.errors.insert(
                 id.to_string(),
                 format!("the virtual microphone stopped ({code})"),

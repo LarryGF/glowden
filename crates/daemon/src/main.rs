@@ -370,6 +370,28 @@ fn manage(shared: Shared) {
             for id in gone {
                 st.voice.stop(&id);
             }
+            // A rebuilt local source installs its new plugin, which due() then restarts.
+            let rebuilt = sources::refresh_local(&st.config.sources);
+            let voices: Vec<(String, drivers::VoiceDef, VoiceConfig)> = st
+                .workers
+                .keys()
+                .filter_map(|id| {
+                    let v = st.config.devices.get(id)?.voice.clone()?;
+                    v.active()
+                        .then(|| Some((id.clone(), voice_def(&st, id)?, v)))?
+                })
+                .collect();
+            for (id, def, v) in voices {
+                if rebuilt {
+                    let _ = voice_plugin(&st, &id);
+                }
+                if st.voice.due(&id) {
+                    start_voice(&mut st, &id, &def, &v);
+                    if v.default_mic && st.voice.status(&id).0 {
+                        voice::make_default();
+                    }
+                }
+            }
             // DPI levels picked with the mouse's buttons are remembered like UI changes.
             let picked: Vec<(String, usize)> = st
                 .workers

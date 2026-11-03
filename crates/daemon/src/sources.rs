@@ -42,6 +42,41 @@ pub fn location(url: &str) -> String {
     }
 }
 
+/// The index.json of a source in a local folder (None for one online).
+fn local_index(url: &str) -> Option<PathBuf> {
+    let loc = location(url);
+    let local = loc.strip_prefix("file://").unwrap_or(&loc);
+    if local.contains("://") {
+        return None;
+    }
+    let path = Path::new(local);
+    Some(if path.is_dir() {
+        path.join("index.json")
+    } else {
+        path.to_path_buf()
+    })
+}
+
+/// Reads local sources again whose index.json changed since it was last read (a rebuilt
+/// folder), so new plugin builds are picked up. Whether any changed.
+pub fn refresh_local(sources: &[SourceConfig]) -> bool {
+    let modified = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+    let mut changed = false;
+    for s in sources {
+        let Some(index) = local_index(&s.url).and_then(|p| modified(&p)) else {
+            continue;
+        };
+        if modified(&dir(&s.url).join("index.json")).is_some_and(|read| read >= index) {
+            continue;
+        }
+        match refresh(&s.url) {
+            Ok(_) => changed = true,
+            Err(e) => eprintln!("device source {}: {e}", s.url),
+        }
+    }
+    changed
+}
+
 /// A file next to the source's index: fetched over HTTP(S) with curl, or read from disk.
 fn fetch(url: &str, name: &str) -> Result<Vec<u8>, String> {
     let loc = location(url);
@@ -217,9 +252,12 @@ pub fn plugin(source: &SourceConfig, id: &str) -> Result<PathBuf, String> {
         ));
     }
     std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
-    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    // A new file renamed over the old one: a running plugin can't be written to.
+    let tmp = path.with_extension("part");
+    std::fs::write(&tmp, &bytes).map_err(|e| e.to_string())?;
     use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+    std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))
         .map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &path).map_err(|e| e.to_string())?;
     Ok(path)
 }
