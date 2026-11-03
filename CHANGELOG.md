@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.1](https://github.com/LarryGF/glowden/compare/v0.2.0...v0.2.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* **app:** stop live lighting views while the window is hidden ([ce9345c](https://github.com/LarryGF/glowden/commit/ce9345c3127babeb9e4330be5759199a6802c0ff))
+* **daemon:** restart the Blue VO!CE plugin after a crash or update ([f2c0fdc](https://github.com/LarryGF/glowden/commit/f2c0fdcebdaa241dea33301623d9866c4ebf69b1))
+* **packaging:** restart running glowdend after an upgrade ([ac47233](https://github.com/LarryGF/glowden/commit/ac4723301f4ae0fbeaa987a9f2da7d31c2cb839c))
+
 ## [0.2.0](https://github.com/LarryGF/glowden/compare/v0.1.0...v0.2.0) (2026-11-02)
 
 
