@@ -44,6 +44,8 @@ struct State {
     low_battery: std::collections::HashSet<String>,
     /// Products already looked up in the device sources this run.
     searched: std::collections::HashSet<u16>,
+    /// Nodes that are plugged in but didn't answer lately (a dongle whose headset is off).
+    silent: std::collections::HashSet<String>,
 }
 
 impl State {
@@ -207,6 +209,7 @@ fn main() {
             focused: None,
             low_battery: Default::default(),
             searched: Default::default(),
+            silent: Default::default(),
         }),
         Condvar::new(),
     ));
@@ -353,13 +356,17 @@ fn manage(shared: Shared) {
     loop {
         {
             let mut st = shared.0.lock().unwrap();
+            let mut stopped = Vec::new();
             st.workers.retain(|id, h| {
                 let alive = h.alive.load(Ordering::Relaxed);
                 if !alive {
                     eprintln!("{id}: gone");
+                    stopped.push(id.clone());
                 }
                 alive
             });
+            // Listed as off right away; this loop's scan corrects it if the node is unplugged.
+            st.silent.extend(stopped);
             let gone: Vec<String> = st
                 .config
                 .devices
@@ -490,8 +497,13 @@ fn manage(shared: Shared) {
                 find_definition(shared.clone(), product, f.name.clone());
             }
             let voice = cfg.voice.clone().filter(|v| v.active());
-            st.workers
-                .insert(id.clone(), worker::spawn(f, cfg, driver.clone()));
+            let handle = worker::spawn(f, cfg, driver.clone());
+            let seen = handle.view.lock().unwrap().seen();
+            if st.config.seen.get(&id) != Some(&seen) {
+                st.config.seen.insert(id.clone(), seen);
+                st.config.save();
+            }
+            st.workers.insert(id.clone(), handle);
             if let (Some(v), Some(def)) = (voice, driver.and_then(|d| d.voice)) {
                 start_voice(&mut st, &id, &def, &v);
                 if v.default_mic {
@@ -503,7 +515,10 @@ fn manage(shared: Shared) {
         });
         let now = std::time::Instant::now();
         silent.extend(quiet.into_iter().map(|id| (id, now)));
-        shared.0.lock().unwrap().scanned = true;
+        let mut st = shared.0.lock().unwrap();
+        st.silent = silent.keys().cloned().collect();
+        st.scanned = true;
+        drop(st);
         shared.1.notify_all();
         std::thread::sleep(Duration::from_secs(3));
     }
@@ -742,6 +757,13 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
                 .values()
                 .map(|h| h.view.lock().unwrap().clone())
                 .collect();
+            views.extend(
+                st.config
+                    .seen
+                    .iter()
+                    .filter(|(id, _)| st.silent.contains(*id) && !st.workers.contains_key(*id))
+                    .map(|(id, seen)| view::DeviceView::off(id, seen)),
+            );
             for v in views.iter_mut() {
                 let cfg = st.config.devices.get(&v.id).cloned().unwrap_or_default();
                 if let (Some(b), Some(model)) = (v.battery.as_mut(), v.model.as_deref()) {
@@ -1133,7 +1155,8 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
             let model = st
                 .workers
                 .get(&id)
-                .and_then(|h| h.view.lock().unwrap().model.clone());
+                .and_then(|h| h.view.lock().unwrap().model.clone())
+                .or_else(|| st.config.seen.get(&id).and_then(|s| s.model.clone()));
             Ok(json!(model.as_deref().and_then(view::image)))
         }
         Request::SetDpi {

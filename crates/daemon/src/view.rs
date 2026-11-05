@@ -46,6 +46,48 @@ pub struct DeviceView {
     pub picture_clip: Option<String>,
     #[serde(skip)]
     pub photo: Option<crate::drivers::Photo>,
+    /// Switched off behind a dongle that's still plugged in (a G522 headset).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub off: bool,
+}
+
+impl DeviceView {
+    pub fn seen(&self) -> crate::config::Seen {
+        crate::config::Seen {
+            name: self.name.clone(),
+            kind: self.kind.to_string(),
+            product: self.product.clone(),
+            model: self.model.clone(),
+        }
+    }
+
+    /// A device met before that doesn't answer now.
+    pub fn off(id: &str, seen: &crate::config::Seen) -> DeviceView {
+        DeviceView {
+            id: id.to_string(),
+            name: seen.name.clone(),
+            kind: match seen.kind.as_str() {
+                "keyboard" => "keyboard",
+                "mouse" => "mouse",
+                "headset" => "headset",
+                "microphone" => "microphone",
+                _ => "device",
+            },
+            product: seen.product.clone(),
+            connection: "LIGHTSPEED",
+            battery: None,
+            caps: Vec::new(),
+            features: Vec::new(),
+            model: seen.model.clone(),
+            firmware_effects: Vec::new(),
+            hid_usage_zones: false,
+            first_view: false,
+            fallback_picture: None,
+            picture_clip: None,
+            photo: None,
+            off: true,
+        }
+    }
 }
 
 #[derive(Serialize, Clone)]
@@ -163,6 +205,7 @@ pub fn build(f: &mut Found, driver: Option<&crate::drivers::Driver>) -> DeviceVi
         fallback_picture: driver.and_then(crate::drivers::Registry::fallback_picture),
         picture_clip: driver.and_then(|d| d.layout.picture_clip.clone()),
         photo: driver.and_then(|d| d.layout.photo.clone()),
+        off: false,
     }
 }
 

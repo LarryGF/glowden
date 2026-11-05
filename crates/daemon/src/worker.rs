@@ -197,16 +197,24 @@ fn run(
             });
         }
 
-        if last_battery.elapsed() > Duration::from_secs(60) {
+        // A headset switched off behind its dongle gives no I/O error, only unanswered
+        // requests; it's checked more often and the worker ends so it's listed as off.
+        let headset = found.device.is_centurion();
+        let every = Duration::from_secs(if headset { 15 } else { 60 });
+        if last_battery.elapsed() > every {
             last_battery = Instant::now();
             // A mouse that slept or reconnected forgets the spy.
             dpi.restart(&mut found);
-            if let Ok((percent, charging)) = devices::battery(&mut found.device) {
-                view.lock().unwrap().battery = Some(view::Battery {
-                    percent,
-                    charging,
-                    hours: None,
-                });
+            match devices::battery(&mut found.device) {
+                Ok((percent, charging)) => {
+                    view.lock().unwrap().battery = Some(view::Battery {
+                        percent,
+                        charging,
+                        hours: None,
+                    });
+                }
+                Err(e) if headset => return Err(format!("switched off ({e})")),
+                Err(_) => {}
             }
         }
     }

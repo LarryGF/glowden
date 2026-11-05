@@ -120,6 +120,8 @@ export interface Device {
   features: { id: string; name: string; version: number }[];
   model: string | null;
   firmware_effects: { id: string; label: string }[];
+  /** Switched off behind a dongle that's still plugged in. */
+  off?: boolean;
 }
 
 /** Mirrors glowdend's config: speeds, sizes and levels are 1..100 sliders. `glow` scales the

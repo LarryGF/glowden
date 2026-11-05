@@ -227,10 +227,22 @@ impl VoiceConfig {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Seen {
+    pub name: String,
+    pub kind: String,
+    pub product: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Default)]
 pub struct Config {
     /// Keyed by stable device id ("<usb port>:<product>").
     pub devices: BTreeMap<String, DeviceConfig>,
+    /// Devices met before, to list them as off while their dongle stays plugged in.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub seen: BTreeMap<String, Seen>,
     #[serde(default)]
     pub app: AppSettings,
     /// Per-app profiles; the settings above are the default profile.

@@ -37,15 +37,15 @@
     </div>
     <div class="grid" class:list={layout === "list"}>
       {#each devices as d (d.id)}
-        <div class="card" class:wide={d.kind === "keyboard" && layout === "grid"}>
-          <button class="open" onclick={() => onopen(d)} aria-label="Open {d.name}">
+        <div class="card" class:wide={d.kind === "keyboard" && layout === "grid"} class:off={d.off}>
+          <button class="open" onclick={() => onopen(d)} disabled={d.off} aria-label="Open {d.name}">
             <h2>{d.name}</h2>
             <div class="meta">
               {#if d.battery}<BatteryBadge battery={d.battery} />{/if}
-              <span>{d.connection === "LIGHTSPEED" ? "Wireless" : "USB"}</span>
+              <span>{d.off ? "Off" : d.connection === "LIGHTSPEED" ? "Wireless" : "USB"}</span>
             </div>
             <div class="picture">
-              {#if d.caps.includes("lighting")}
+              {#if d.caps.includes("lighting") && !d.off}
                 <LightingViewer device={d} compact size={layout === "list" ? (d.kind === "keyboard" ? 260 : 110) : d.kind === "keyboard" ? 520 : 230} />
               {:else}
                 <DeviceVisual device={d} size={layout === "list" ? (d.kind === "keyboard" ? 260 : 110) : d.kind === "keyboard" ? 520 : 230} />
@@ -64,7 +64,9 @@
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; max-width: 1500px; margin: 0 auto; }
   .card { background: var(--bg-card); border-radius: 14px; border: 1px solid transparent; transition: border-color 0.15s; }
   .card.wide { grid-column: span 2; }
-  .card:hover { border-color: var(--line); }
+  .card:hover:not(.off) { border-color: var(--line); }
+  .card.off { opacity: 0.5; }
+  .card.off .open { cursor: default; }
   .open { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: stretch; text-align: left; gap: 8px; padding: 24px 26px; background: none; border: none; }
   .open:hover { background: none; }
   h2 { margin: 0; font-size: 22px; font-weight: 700; }

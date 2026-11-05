@@ -49,8 +49,6 @@ from the packages hasn't been opened yet.
 
 - An app build from before the zombie-reaping fix leaves a `<defunct>` glowdend entry until
   that app window closes. Harmless.
-- The G522 drops out of the device list while the headset is off; it should appear as
-  "off" instead.
 
 ## Device pictures
 
