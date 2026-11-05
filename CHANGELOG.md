@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.2](https://github.com/LarryGF/glowden/compare/v0.2.1...v0.2.2) (2026-11-05)
+
+
+### Bug Fixes
+
+* **app:** pause polling while the window is hidden ([44c3f53](https://github.com/LarryGF/glowden/commit/44c3f535c976d6b6fbc447e1be9127c4f5b97312))
+* list a switched-off headset as off instead of dropping it ([8aee94c](https://github.com/LarryGF/glowden/commit/8aee94c15d4edb680fba8094995f038eb18be1d6))
+
 ## [0.2.1](https://github.com/LarryGF/glowden/compare/v0.2.0...v0.2.1) (2026-11-03)
 
 
