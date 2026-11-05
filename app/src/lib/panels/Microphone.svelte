@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { api, debounce, type Device, type VoiceState } from "../api";
+  import { page } from "../visibility.svelte";
   import MicTest from "./MicTest.svelte";
   import Voice from "./Voice.svelte";
   import VoiceEffects from "./VoiceEffects.svelte";
@@ -23,7 +24,7 @@
     const load = () => api.voiceState(device.id).then((s) => (voice = s)).catch(onerror);
     load();
     // Picks up a plugin that stopped on its own.
-    const timer = setInterval(load, 3000);
+    const timer = setInterval(() => page.visible && load(), 3000);
     return () => {
       clearInterval(timer);
       // Leaving the page ends the mic test, as closing G HUB's panel does.

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { api, type ProfilesInfo } from "./api";
+  import { page } from "./visibility.svelte";
 
   let { onerror }: { onerror: (e: unknown) => void } = $props();
 
@@ -23,7 +24,7 @@
   onMount(() => {
     run(api.profiles());
     // The focused app and the recent list change as you switch windows.
-    const timer = setInterval(() => api.profiles().then((p) => (info = p)).catch(() => {}), 2000);
+    const timer = setInterval(() => page.visible && api.profiles().then((p) => (info = p)).catch(() => {}), 2000);
     return () => clearInterval(timer);
   });
 

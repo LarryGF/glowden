@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { api, type Device, type VoiceState } from "../api";
+  import { page } from "../visibility.svelte";
   import PresetPicker from "./PresetPicker.svelte";
 
   // G HUB's Blue VO!CE tab: enable, preset, advanced controls.
@@ -18,6 +19,7 @@
 
   onMount(() => {
     const meter = setInterval(async () => {
+      if (!page.visible) return;
       levels = voice.running ? await api.voiceLevels(device.id).catch(() => null) : null;
     }, 100);
     return () => clearInterval(meter);

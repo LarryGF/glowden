@@ -24,10 +24,13 @@
   let layer: HTMLCanvasElement | null = null;
   let paths: { zone: number; path: Path2D }[] = [];
 
+  let destroyed = false;
   onMount(async () => {
     layout = await api.deviceLayout(device.id).catch(() => null);
     loaded = true;
     if (layout) await prepare(layout);
+    // Closed while loading: onDestroy already ran, so no interval may start.
+    if (destroyed) return;
     const poll = () =>
       page.visible && api.lightingState(device.id).then((s) => {
         state = s;
@@ -36,7 +39,10 @@
     poll();
     timer = setInterval(poll, compact ? 250 : 100);
   });
-  onDestroy(() => clearInterval(timer));
+  onDestroy(() => {
+    destroyed = true;
+    clearInterval(timer);
+  });
 
   /**
    * Device pictures have transparent cutouts where light shines through (key legends, the

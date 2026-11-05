@@ -2,6 +2,7 @@
   import mark from "./assets/mark.png";
   import { onMount } from "svelte";
   import { api, type Device } from "./lib/api";
+  import { page } from "./lib/visibility.svelte";
   import DevicePage from "./lib/DevicePage.svelte";
   import Home from "./lib/Home.svelte";
   import Settings from "./lib/Settings.svelte";
@@ -39,10 +40,10 @@
   onMount(() => {
     refresh();
     // Quiet background refresh: battery level, charging, devices coming and going.
-    const timer = setInterval(() => api.listDevices().then((d) => (devices = d)).catch(() => {}), 15000);
+    const timer = setInterval(() => page.visible && api.listDevices().then((d) => (devices = d)).catch(() => {}), 15000);
     // The active profile follows the focused app.
     pollProfile();
-    const profileTimer = setInterval(pollProfile, 2000);
+    const profileTimer = setInterval(() => page.visible && pollProfile(), 2000);
     return () => {
       clearInterval(timer);
       clearInterval(profileTimer);
@@ -77,6 +78,8 @@
       <Settings onerror={showError} onchanged={refresh} />
     {:else if profilesPage}
       <Profiles onerror={showError} />
+    {:else if selected?.off}
+      <p class="off">{selected.name} is switched off. Its settings come back when it's turned on.</p>
     {:else if selected}
       {#key selected.id}
         <DevicePage device={selected} onerror={showError} />
@@ -103,6 +106,7 @@
   .gear:hover { color: var(--text); }
   .back { border: none; background: none; font-size: 20px; padding: 4px 10px; }
   .title { font-weight: 600; }
+  .off { color: var(--text-dim); padding: 40px; text-align: center; }
   .body { min-height: 0; overflow: auto; }
   .toast {
     position: fixed;
