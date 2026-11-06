@@ -20,6 +20,10 @@ It ships no Logitech or DTS software, firmware, pictures, sounds or presets, and
 definitions: those come from device sources (GlowDen's own is glowden-devices), and
 describe protocol facts such as product ids, feature numbers and parameter layouts.
 
+Some definitions point at a product photo Logitech publishes on its website; GlowDen
+downloads it on the user's machine on first use (`~/.cache/glowden/photos`) and doesn't
+redistribute it.
+
 Users bring their own assets. GlowDen reads files from folders the user chooses, such as
 the user's own G HUB installation on a dual-boot drive: device pictures, sound clips, VO!CE
 presets and the Blue VO!CE audio engine. It reads them in place and never copies them.
