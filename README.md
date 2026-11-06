@@ -122,7 +122,7 @@ installing, replug it once so the udev rule applies to it.
 **Requirements**: PipeWire as the sound server for Blue VO!CE, voice effects and the audio
 visualizer (default on Arch, Debian 12 desktops and Ubuntu 22.10+; on Ubuntu 22.04 install
 `pipewire-pulse`). Per-app profiles follow the focused window on KDE Plasma. The screen
-sampler needs `xdg-desktop-portal`; the tray icon needs libayatana-appindicator.
+sampler needs `xdg-desktop-portal`.
 
 ### First start
 

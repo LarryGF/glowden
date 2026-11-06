@@ -13,9 +13,11 @@ target/release/glowdenctl list         # CLI: devices and features (GLOWDEN_DEBU
 Device access comes from `packaging/udev/70-glowden.rules` (installed on this machine).
 `packaging/arch/PKGBUILD` (built with `makepkg`) and `packaging/deb/build.sh` (Ubuntu 22.04
 container → `dist/glowden_<version>_amd64.deb`) install the app, the CLI, the service, the
-helpers, the rule, a systemd user unit and a desktop entry. The .deb was test-installed in
-clean Ubuntu 22.04 and Debian 12 containers (dependencies resolve, binaries start); the GUI
-from the packages hasn't been opened yet.
+helpers, the rule, a systemd user unit and a desktop entry. Fresh installs of both
+packages were tested on 2026-11-06 in clean Ubuntu 22.04 and Arch containers with a virtual
+display: the app opens and starts the service, the built-in source and a definition install
+work, and the public Blue VO!CE plugin matches its checksum and answers. That test found the
+Arch package missing libayatana-appindicator, which the app needs to start.
 
 ## Layout
 

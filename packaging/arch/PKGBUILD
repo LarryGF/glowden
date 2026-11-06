@@ -5,9 +5,10 @@ pkgrel=1
 pkgdesc="GlowDen: open device hub for Logitech G peripherals (lighting, buttons, DPI, microphone)"
 arch=('x86_64')
 license=('MIT OR Apache-2.0')
-depends=('webkit2gtk-4.1' 'gtk3' 'pipewire' 'systemd-libs' 'dbus' 'libpulse' 'curl')
-optdepends=('libayatana-appindicator: tray icon'
-            'libnotify: low-battery and lock-key notifications'
+# The app loads libayatana-appindicator at startup for its tray and won't start without it.
+depends=('webkit2gtk-4.1' 'gtk3' 'pipewire' 'systemd-libs' 'dbus' 'libpulse' 'curl'
+         'libayatana-appindicator')
+optdepends=('libnotify: low-battery and lock-key notifications'
             'sqlite: importing settings from a G HUB settings.db'
             'xdg-desktop-portal: screen sampler lighting effect')
 makedepends=('cargo' 'pnpm' 'nodejs')
