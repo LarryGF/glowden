@@ -26,6 +26,20 @@ this repository or its packages. GlowDen is not affiliated with Logitech; see
 - **Profiles** per application (switch with the focused window on KDE Plasma), backups,
   tray icon, low-battery and lock-key notifications, start on login.
 
+### Without G HUB files
+
+You don't need Windows or G HUB to use GlowDen. Lighting, brightness, DPI, report rate,
+button assignments, profiles and battery levels work with only the device definitions
+GlowDen downloads by itself. What comes from G HUB's files, and is missing without them:
+
+- device pictures and the live LED preview drawn on them (a generic icon is shown instead;
+  some definitions point at a public product photo);
+- Blue VO!CE, its presets and the voice effects (they run on DTS's engine from those files);
+- sound clips for button assignments;
+- battery hours left (the percentage still shows).
+
+Per-app profile switching follows the focused window on KDE Plasma only for now.
+
 Tested with a G515 LS TKL keyboard, a G502 X PLUS mouse, a Yeti GX microphone and a G522
 headset (detection and battery only so far). Port status against G HUB:
 [`docs/FEATURES.md`](docs/FEATURES.md); current state: [`docs/STATUS.md`](docs/STATUS.md).

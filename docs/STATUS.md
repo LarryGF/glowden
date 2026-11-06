@@ -1,6 +1,6 @@
 # Status
 
-Last updated 2026-11-02. Feature-by-feature port status lives in `FEATURES.md`.
+Last updated 2026-11-06. Feature-by-feature port status lives in `FEATURES.md`.
 
 ## Running it
 
@@ -37,6 +37,9 @@ from the packages hasn't been opened yet.
 - Brightness on mic (0–255) and keyboard (0–100).
 - Mouse DPI and report rate (read; write-back of current values).
 - Service: saves settings, applies them on connect, single instance, survives the UI closing.
+- G522 switched off behind its dongle: listed as off, at service start and when switched off
+  while running.
+- Package upgrade (0.2.0 → 0.2.2): the post-upgrade hook restarted the running glowdend.
 
 ## Built but not verified
 
