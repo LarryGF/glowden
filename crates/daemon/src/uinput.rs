@@ -84,6 +84,12 @@ impl VirtualInput {
         self.event(EV_SYN, 0, 0)
     }
 
+    /// A key event as a keyboard sends it: 0 up, 1 down, 2 auto-repeat.
+    pub fn key_event(&mut self, code: u16, value: i32) -> std::io::Result<()> {
+        self.event(EV_KEY, code, value)?;
+        self.sync()
+    }
+
     pub fn key(&mut self, code: u16, down: bool) -> std::io::Result<()> {
         self.event(EV_KEY, code, down as i32)?;
         self.sync()
