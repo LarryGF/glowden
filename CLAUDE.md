@@ -29,6 +29,22 @@ track what is done, verified, and next.
   the dev server (`localhost:1420`) and shows "Connection refused". After a workspace
   `cargo build`, run `pnpm tauri build` again.
 
+## Releasing and installing
+
+- release-please opens a release PR after Conventional Commits land on `main`; merging it
+  builds the Arch and .deb packages (`gh run watch` the release-please run).
+- Once the release run has passed, install the new package on this machine yourself; don't
+  hand the command to the user. `sudo` needs a password Claude can't type, so use `pkexec`,
+  which asks the user to approve in a desktop dialog:
+  ```sh
+  cd ~/git/logitech/scratch
+  gh release download vX.Y.Z -R LarryGF/glowden -p '*.pkg.tar.zst' --clobber
+  # pkexec doesn't keep the working directory: pass an absolute path
+  pkexec pacman -U --noconfirm "$PWD/glowden-X.Y.Z-1-x86_64.pkg.tar.zst"
+  ```
+- Then check `pacman -Q glowden`. The package's upgrade hook restarts `glowdend`. The app
+  isn't restarted: ask the user to reopen GlowDen, or restart it only with their OK.
+
 ## Testing against hardware
 
 - `target/release/glowdenctl list` and `GLOWDEN_DEBUG=1` frame traces are the main tools.
