@@ -16,7 +16,9 @@ GlowDen is its own code under the MIT or Apache-2.0 license (`LICENSE-MIT`, `LIC
 It talks to devices over their USB and HID++ interfaces, which were worked out from the
 devices themselves and from captures of their traffic, for interoperability.
 
-It ships no Logitech or DTS software, firmware, pictures, sounds or presets, and no device
+It ships no Logitech or DTS software, firmware, pictures, sounds or presets (one README
+screenshot shows the app displaying device pictures read from a user's G HUB files, to
+illustrate that feature), and no device
 definitions: those come from device sources (GlowDen's own is glowden-devices), and
 describe protocol facts such as product ids, feature numbers and parameter layouts.
 

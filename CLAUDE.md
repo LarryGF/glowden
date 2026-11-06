@@ -57,7 +57,10 @@ track what is done, verified, and next.
 
 ## Logitech material
 
-- Do not commit Logitech binaries, pictures, presets or data files. Pictures, LED geometry,
+- Do not commit Logitech binaries, pictures, presets or data files. The one exception is a
+  README screenshot of the app showing device pictures as GlowDen renders them from the
+  user's G HUB files (`docs/screenshots/home-ghub.png`); keep those few and never commit a
+  picture on its own. Pictures, LED geometry,
   sounds, presets and the VO!CE DLL are read in place from folders the user chooses
   (`crates/daemon/src/assets.rs`); never copy them.
 - Device definitions and plugins live in the separate glowden-devices repo (device

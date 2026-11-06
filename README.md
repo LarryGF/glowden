@@ -26,6 +26,15 @@ this repository or its packages. GlowDen is not affiliated with Logitech; see
 - **Profiles** per application (switch with the focused window on KDE Plasma, GNOME and Hyprland), backups,
   tray icon, low-battery and lock-key notifications, start on login.
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Lighting page with effect presets](docs/screenshots/lighting.png) | ![Blue VO!CE panel](docs/screenshots/blue-voice.png) |
+| Lighting: device effects and live effects drawn by the service | Blue VO!CE with your own engine, presets and level meters |
+| ![Mouse sensitivity page](docs/screenshots/sensitivity.png) | ![Device list with pictures from G HUB files](docs/screenshots/home-ghub.png) |
+| DPI levels, DPI shift and report rate | With G HUB files added in Settings: device pictures and live LED preview |
+
 ### Without G HUB files
 
 You don't need Windows or G HUB to use GlowDen. Lighting, brightness, DPI, report rate,
@@ -37,6 +46,8 @@ GlowDen downloads by itself. What comes from G HUB's files, and is missing witho
 - Blue VO!CE, its presets and the voice effects (they run on DTS's engine from those files);
 - sound clips for button assignments;
 - battery hours left (the percentage still shows).
+
+![Device list without G HUB files](docs/screenshots/home-plain.png)
 
 Per-app profile switching follows the focused window on KDE Plasma, GNOME (through the
 GlowDen focus extension the packages install; log out and in once after installing) and
