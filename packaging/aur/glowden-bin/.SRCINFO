@@ -1,0 +1,26 @@
+pkgbase = glowden-bin
+	pkgdesc = Open device hub for Logitech G peripherals: lighting, buttons, DPI, profiles, microphone (prebuilt)
+	pkgver = 0.3.0
+	pkgrel = 1
+	url = https://github.com/LarryGF/glowden
+	install = glowden.install
+	arch = x86_64
+	license = MIT OR Apache-2.0
+	depends = webkit2gtk-4.1
+	depends = gtk3
+	depends = pipewire
+	depends = systemd-libs
+	depends = dbus
+	depends = libpulse
+	depends = curl
+	depends = libayatana-appindicator
+	optdepends = libnotify: low-battery and lock-key notifications
+	optdepends = sqlite: importing settings from a G HUB settings.db
+	optdepends = xdg-desktop-portal: screen sampler lighting effect
+	provides = glowden
+	conflicts = glowden
+	noextract = glowden-0.3.0.pkg.tar.zst
+	source = glowden-0.3.0.pkg.tar.zst::https://github.com/LarryGF/glowden/releases/download/v0.3.0/glowden-0.3.0-1-x86_64.pkg.tar.zst
+	sha256sums = 8a93c622a8fc9c40da85717ba40096419817daf3fa55b2abced1c8cdc692b935
+
+pkgname = glowden-bin

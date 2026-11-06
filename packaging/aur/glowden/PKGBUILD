@@ -1,0 +1,45 @@
+# Maintainer: LarryGF <lawrence.gil.fer at gmail dot com>
+pkgname=glowden
+pkgver=0.3.0
+pkgrel=1
+pkgdesc="Open device hub for Logitech G peripherals: lighting, buttons, DPI, profiles, microphone"
+arch=('x86_64')
+url="https://github.com/LarryGF/glowden"
+license=('MIT OR Apache-2.0')
+# The app loads libayatana-appindicator at startup for its tray and won't start without it.
+depends=('webkit2gtk-4.1' 'gtk3' 'pipewire' 'systemd-libs' 'dbus' 'libpulse' 'curl'
+         'libayatana-appindicator')
+optdepends=('libnotify: low-battery and lock-key notifications'
+            'sqlite: importing settings from a G HUB settings.db'
+            'xdg-desktop-portal: screen sampler lighting effect')
+makedepends=('cargo' 'pnpm' 'nodejs')
+provides=('glowden')
+conflicts=('glowden-bin')
+install=glowden.install
+# Rust links the C helpers itself and can't read GCC LTO objects.
+options=('!lto')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('847c37bb37bceaac7cc19167445ed1a29f7ccd5cdf81cb0897f0bacae20341dd')
+
+build() {
+  cd "$pkgname-$pkgver/app"
+  pnpm install --frozen-lockfile
+  pnpm tauri build --no-bundle
+  cd ..
+  cargo build --release --locked -p glowden-cli -p glowdend -p glowden-sampler
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  install -Dm755 -t "$pkgdir/usr/bin" target/release/{glowden,glowdenctl,glowdend,glowden-sampler}
+  install -Dm644 packaging/udev/70-glowden.rules "$pkgdir/usr/lib/udev/rules.d/70-glowden.rules"
+  install -Dm644 packaging/systemd/glowdend.service "$pkgdir/usr/lib/systemd/user/glowdend.service"
+  install -Dm755 packaging/linux/restart-service "$pkgdir/usr/lib/glowden/restart-service"
+  install -Dm644 packaging/linux/glowden.desktop "$pkgdir/usr/share/applications/glowden.desktop"
+  install -Dm644 app/src-tauri/icons/icon.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/glowden.png"
+  for size in 32x32 128x128 512x512; do
+    install -Dm644 "app/src-tauri/icons/$size.png" "$pkgdir/usr/share/icons/hicolor/$size/apps/glowden.png"
+  done
+  install -Dm644 -t "$pkgdir/usr/share/licenses/$pkgname" LICENSE-MIT LICENSE-APACHE
+  install -Dm644 -t "$pkgdir/usr/share/doc/$pkgname" README.md NOTICE.md
+}

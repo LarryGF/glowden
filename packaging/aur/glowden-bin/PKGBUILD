@@ -1,0 +1,27 @@
+# Maintainer: LarryGF <lawrence.gil.fer at gmail dot com>
+# Repackages the Arch package attached to each GitHub release.
+pkgname=glowden-bin
+pkgver=0.3.0
+pkgrel=1
+pkgdesc="Open device hub for Logitech G peripherals: lighting, buttons, DPI, profiles, microphone (prebuilt)"
+arch=('x86_64')
+url="https://github.com/LarryGF/glowden"
+license=('MIT OR Apache-2.0')
+depends=('webkit2gtk-4.1' 'gtk3' 'pipewire' 'systemd-libs' 'dbus' 'libpulse' 'curl'
+         'libayatana-appindicator')
+optdepends=('libnotify: low-battery and lock-key notifications'
+            'sqlite: importing settings from a G HUB settings.db'
+            'xdg-desktop-portal: screen sampler lighting effect')
+provides=('glowden')
+conflicts=('glowden')
+install=glowden.install
+source=("glowden-$pkgver.pkg.tar.zst::$url/releases/download/v$pkgver/glowden-$pkgver-1-x86_64.pkg.tar.zst")
+noextract=("glowden-$pkgver.pkg.tar.zst")
+sha256sums=('8a93c622a8fc9c40da85717ba40096419817daf3fa55b2abced1c8cdc692b935')
+
+package() {
+  bsdtar -xf "glowden-$pkgver.pkg.tar.zst" -C "$pkgdir" usr
+  # Licenses and docs under this package's name.
+  mv "$pkgdir/usr/share/licenses/glowden" "$pkgdir/usr/share/licenses/$pkgname"
+  mv "$pkgdir/usr/share/doc/glowden" "$pkgdir/usr/share/doc/$pkgname"
+}
