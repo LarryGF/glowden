@@ -1,0 +1,7 @@
+{
+  "uuid": "glowden-focus@glowden.dev",
+  "name": "GlowDen focus",
+  "description": "Tells the GlowDen service which app has focus, for per-app profiles.",
+  "shell-version": ["45", "46", "47", "48", "49", "50", "51"],
+  "url": "https://github.com/LarryGF/glowden"
+}

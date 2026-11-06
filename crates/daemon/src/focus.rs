@@ -1,5 +1,7 @@
 //! Which app has focus, for per-app profiles. On KDE (Wayland or X11) a small KWin script
-//! reports every window activation to this service over the session bus.
+//! reports every window activation to this service over the session bus; on GNOME the
+//! packaged GlowDen focus extension does the same. Hyprland is followed through its event
+//! socket.
 
 use std::sync::mpsc::Sender;
 use std::time::Duration;
@@ -9,6 +11,7 @@ use dbus::channel::MatchingReceiver;
 use dbus::message::MatchRule;
 
 const NAME: &str = "dev.glowden.Focus";
+const GNOME_EXTENSION: &str = "glowden-focus@glowden.dev";
 
 const SCRIPT: &str = r#"// Installed by glowden: reports the focused window's app to the glowden service.
 function report(w) {
@@ -24,6 +27,17 @@ report(workspace.activeWindow);
 pub type Focus = (String, String);
 
 pub fn spawn(tx: Sender<Focus>) {
+    if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some() {
+        let tx = tx.clone();
+        std::thread::Builder::new()
+            .name("focus-hyprland".into())
+            .spawn(move || {
+                if let Err(e) = hyprland(tx) {
+                    eprintln!("focus tracking (Hyprland) stopped: {e}");
+                }
+            })
+            .expect("spawn focus thread");
+    }
     std::thread::Builder::new()
         .name("focus".into())
         .spawn(move || {
@@ -49,7 +63,16 @@ fn run(tx: Sender<Focus>) -> Result<(), Box<dyn std::error::Error>> {
             true
         }),
     );
-    install_kwin_script(&conn)?;
+    // Messages from any reporter are accepted, so the listener runs whichever one loads.
+    match install_kwin_script(&conn) {
+        Ok(()) => eprintln!("focus tracking: KWin script"),
+        Err(kwin) => match enable_gnome_extension(&conn) {
+            Ok(()) => eprintln!("focus tracking: GNOME extension {GNOME_EXTENSION}"),
+            Err(gnome) => {
+                eprintln!("focus tracking: no KWin ({kwin}) or GNOME extension ({gnome})")
+            }
+        },
+    }
     loop {
         conn.process(Duration::from_secs(5))?;
     }
@@ -78,5 +101,44 @@ fn install_kwin_script(conn: &Connection) -> Result<(), Box<dyn std::error::Erro
         Duration::from_secs(5),
     );
     script.method_call::<(), _, _, _>("org.kde.kwin.Script", "run", ())?;
+    Ok(())
+}
+
+/// GNOME Shell only loads extensions it found at login, so a freshly installed package
+/// works after logging out and in.
+fn enable_gnome_extension(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
+    let shell = conn.with_proxy(
+        "org.gnome.Shell.Extensions",
+        "/org/gnome/Shell/Extensions",
+        Duration::from_secs(5),
+    );
+    let (ok,): (bool,) = shell.method_call(
+        "org.gnome.Shell.Extensions",
+        "EnableExtension",
+        (GNOME_EXTENSION,),
+    )?;
+    if ok {
+        Ok(())
+    } else {
+        Err("not loaded by GNOME Shell yet; log out and in after installing GlowDen".into())
+    }
+}
+
+/// Hyprland's event socket sends `activewindow>>CLASS,TITLE` on every focus change.
+fn hyprland(tx: Sender<Focus>) -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::BufRead;
+    let sig = std::env::var("HYPRLAND_INSTANCE_SIGNATURE")?;
+    let runtime = std::env::var("XDG_RUNTIME_DIR")?;
+    let path = std::path::Path::new(&runtime).join(format!("hypr/{sig}/.socket2.sock"));
+    let socket = std::os::unix::net::UnixStream::connect(&path)?;
+    eprintln!("focus tracking: Hyprland");
+    for line in std::io::BufReader::new(socket).lines() {
+        if let Some(rest) = line?.strip_prefix("activewindow>>") {
+            let (class, title) = rest.split_once(',').unwrap_or((rest, ""));
+            if tx.send((class.to_string(), title.to_string())).is_err() {
+                break;
+            }
+        }
+    }
     Ok(())
 }

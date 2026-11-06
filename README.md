@@ -23,7 +23,7 @@ this repository or its packages. GlowDen is not affiliated with Logitech; see
   assignments (keys, macros, media and desktop actions, programs, sounds), left-handed mode.
 - **Microphones**: gain, mute, Blue VO!CE presets and fine-tuning, G HUB's voice effects,
   level meter, preset test on a recording (Yeti GX; VO!CE needs the user's own engine).
-- **Profiles** per application (switch with the focused window on KDE Plasma), backups,
+- **Profiles** per application (switch with the focused window on KDE Plasma, GNOME and Hyprland), backups,
   tray icon, low-battery and lock-key notifications, start on login.
 
 ### Without G HUB files
@@ -38,7 +38,9 @@ GlowDen downloads by itself. What comes from G HUB's files, and is missing witho
 - sound clips for button assignments;
 - battery hours left (the percentage still shows).
 
-Per-app profile switching follows the focused window on KDE Plasma only for now.
+Per-app profile switching follows the focused window on KDE Plasma, GNOME (through the
+GlowDen focus extension the packages install; log out and in once after installing) and
+Hyprland.
 
 Tested with a G515 LS TKL keyboard, a G502 X PLUS mouse, a Yeti GX microphone and a G522
 headset (detection and battery only so far). Port status against G HUB:
@@ -86,7 +88,7 @@ inventory with protocol notes is in [`docs/FEATURES.md`](docs/FEATURES.md).
 | | Custom presets and effects (duplicate, rename, delete) | 🟡 |
 | | Level meter | 🟡 |
 | | Automatic gain control | ⏳ |
-| **Profiles** | Per-app profiles with automatic switching | 🟡 KDE Plasma |
+| **Profiles** | Per-app profiles with automatic switching | 🟡 KDE Plasma, GNOME, Hyprland |
 | | Profile import/export, settings backups | 🟡 |
 | | Sound clips on buttons | 🟡 from your G HUB files |
 | | System actions library | 🟡 |
@@ -121,7 +123,7 @@ installing, replug it once so the udev rule applies to it.
 
 **Requirements**: PipeWire as the sound server for Blue VO!CE, voice effects and the audio
 visualizer (default on Arch, Debian 12 desktops and Ubuntu 22.10+; on Ubuntu 22.04 install
-`pipewire-pulse`). Per-app profiles follow the focused window on KDE Plasma. The screen
+`pipewire-pulse`). Per-app profiles follow the focused window on KDE Plasma, GNOME and Hyprland. The screen
 sampler needs `xdg-desktop-portal`.
 
 ### First start
