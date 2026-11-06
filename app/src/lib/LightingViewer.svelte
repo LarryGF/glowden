@@ -14,7 +14,7 @@
 
   let layout = $state<Layout | null>(null);
   let loaded = $state(false);
-  let state = $state<LightState | null>(null);
+  let lit = $state<LightState | null>(null);
   let canvas = $state<HTMLCanvasElement>();
   let timer: ReturnType<typeof setInterval> | undefined;
 
@@ -33,7 +33,7 @@
     if (destroyed) return;
     const poll = () =>
       page.visible && api.lightingState(device.id).then((s) => {
-        state = s;
+        lit = s;
         draw();
       }).catch(() => {});
     poll();
@@ -120,7 +120,7 @@
   /** While painting, show strokes immediately instead of waiting for the device. */
   function color(zone: number): string {
     if (freestyle.active && !compact) return freestyle.keys[String(zone)] ?? freestyle.base;
-    return state?.zones[String(zone)] ?? "#000000";
+    return lit?.zones[String(zone)] ?? "#000000";
   }
 
   /** Device-run animations are approximated on the LEDs only, not the whole picture. */
@@ -204,8 +204,8 @@
     draw();
   });
 
-  const zones = $derived(Object.keys(state?.zones ?? {}).map(Number).sort((a, b) => a - b));
-  const animation = $derived(state?.mode === "device" ? state.effect : null);
+  const zones = $derived(Object.keys(lit?.zones ?? {}).map(Number).sort((a, b) => a - b));
+  const animation = $derived(lit?.mode === "device" ? lit.effect : null);
 </script>
 
 <div class="stage {animation ?? ''}" class:painting={freestyle.active && !compact} class:compact>

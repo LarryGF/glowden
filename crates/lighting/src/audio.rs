@@ -45,7 +45,9 @@ impl AudioMeter {
             let mut peak = 1e-3f32;
             while stdout.read_exact(&mut raw).is_ok() {
                 let mut re: Vec<f32> = raw
-                    .chunks_exact(4)
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
                     .zip(&window)
                     .map(|(b, w)| f32::from_ne_bytes([b[0], b[1], b[2], b[3]]) * w)
                     .collect();

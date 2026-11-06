@@ -375,7 +375,9 @@ pub mod mouse {
         for page in 0..4u8 {
             let r = dev.call(ADJUSTABLE_DPI, 1, &[0x00, page])?;
             let chunk: Vec<u16> = r[5..20]
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|c| u16::from_be_bytes([c[0], c[1]]))
                 .collect();
             let end = chunk.iter().position(|&w| w == 0);

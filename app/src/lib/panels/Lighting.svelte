@@ -28,7 +28,7 @@
     ...(device.caps.includes("reactive") ? [{ key: "pulse", label: "Pulse", group: "live" as const }] : []),
   ]);
 
-  let effect = $state<Key>("fixed");
+  let chosen = $state<Key>("fixed");
   let color = $state("#2dd4bf");
   let base = $state("#02060c");
   let peak = $state("#ff3ea5");
@@ -81,12 +81,12 @@
           tab = "freestyle";
         } else if (l.effect === "firmware") {
           ({ color, glow } = l);
-          effect = `fw:${l.id}`;
+          chosen = `fw:${l.id}`;
         } else if (l.effect === "ripple") {
           color = l.color;
-          effect = "fw:ripple";
+          chosen = "fw:ripple";
         } else {
-          effect = l.effect;
+          chosen = l.effect;
           if ("color" in l) color = l.color;
           if ("speed" in l) speed = l.speed;
           if ("intensity" in l) intensity = l.intensity;
@@ -140,16 +140,16 @@
   });
 
   function lighting(): Lighting {
-    if (effect.startsWith("fw:")) return { effect: "firmware", id: effect.slice(3), color, glow };
-    switch (effect) {
-      case "breathing": return { effect, color, speed, intensity };
-      case "cycle": return { effect, speed, intensity, saturation };
-      case "wave": return { effect, speed };
-      case "pulse": return { effect, color, base, speed, width, fade, rainbow, glow, backdrop };
-      case "starlight": return { effect, star: color, sky: base, density, glow, backdrop };
-      case "visualizer": return { effect, low: color, high: peak, background: base, glow, backdrop };
-      case "screen": return { effect, speed, boost };
-      case "sequence": return { effect, steps: steps.map((s) => ({ ...s })), blend, spread };
+    if (chosen.startsWith("fw:")) return { effect: "firmware", id: chosen.slice(3), color, glow };
+    switch (chosen) {
+      case "breathing": return { effect: chosen, color, speed, intensity };
+      case "cycle": return { effect: chosen, speed, intensity, saturation };
+      case "wave": return { effect: chosen, speed };
+      case "pulse": return { effect: chosen, color, base, speed, width, fade, rainbow, glow, backdrop };
+      case "starlight": return { effect: chosen, star: color, sky: base, density, glow, backdrop };
+      case "visualizer": return { effect: chosen, low: color, high: peak, background: base, glow, backdrop };
+      case "screen": return { effect: chosen, speed, boost };
+      case "sequence": return { effect: chosen, steps: steps.map((s) => ({ ...s })), blend, spread };
       default: return { effect: "fixed", color };
     }
   }
@@ -173,13 +173,13 @@
   }
   const pushBrightness = debounce(() => api.setBrightness(device.id, brightness).catch(onerror));
 
-  const current = $derived(options.find((o) => o.key === effect));
-  const firmware = $derived(effect.startsWith("fw:"));
-  const hasColor = $derived(!["cycle", "wave", "screen", "sequence"].includes(effect));
-  const hasSpeed = $derived(["breathing", "cycle", "wave", "pulse", "screen"].includes(effect));
-  const layered = $derived(["pulse", "starlight", "visualizer"].includes(effect));
+  const current = $derived(options.find((o) => o.key === chosen));
+  const firmware = $derived(chosen.startsWith("fw:"));
+  const hasColor = $derived(!["cycle", "wave", "screen", "sequence"].includes(chosen));
+  const hasSpeed = $derived(["breathing", "cycle", "wave", "pulse", "screen"].includes(chosen));
+  const layered = $derived(["pulse", "starlight", "visualizer"].includes(chosen));
   const colorLabel = $derived(
-    effect === "starlight" ? "Star color" : effect === "pulse" ? "Pulse color" : effect === "visualizer" ? "Low color" : firmware ? "Effect color" : "Color",
+    chosen === "starlight" ? "Star color" : chosen === "pulse" ? "Pulse color" : chosen === "visualizer" ? "Low color" : firmware ? "Effect color" : "Color",
   );
 </script>
 
@@ -210,14 +210,14 @@
     <h3>On the device</h3>
     <div class="effects">
       {#each options.filter((o) => o.group === "device") as o}
-        <button class:active={effect === o.key} onclick={() => { effect = o.key; push(); }}>{o.label}</button>
+        <button class:active={chosen === o.key} onclick={() => { chosen = o.key; push(); }}>{o.label}</button>
       {/each}
     </div>
     {#if options.some((o) => o.group === "live")}
       <h3>Live <span class="hint">drawn by the GlowDen service</span></h3>
       <div class="effects">
         {#each options.filter((o) => o.group === "live") as o}
-          <button class:active={effect === o.key} onclick={() => { effect = o.key; push(); }}>{o.label}</button>
+          <button class:active={chosen === o.key} onclick={() => { chosen = o.key; push(); }}>{o.label}</button>
         {/each}
       </div>
     {/if}
@@ -227,12 +227,12 @@
     <section>
       <span class="label">{colorLabel}</span>
       <ColorPicker bind:value={color} onchange={push} />
-      {#if effect === "visualizer"}
+      {#if chosen === "visualizer"}
         <label class="inline"><span class="label">Peak color</span><input type="color" bind:value={peak} oninput={push} /></label>
       {/if}
       {#if layered}
         <label class="inline">
-          <span class="label">{effect === "pulse" ? "Resting color" : effect === "visualizer" ? "Background" : "Sky color"}</span>
+          <span class="label">{chosen === "pulse" ? "Resting color" : chosen === "visualizer" ? "Background" : "Sky color"}</span>
           <input type="color" bind:value={base} oninput={push} />
         </label>
       {/if}
@@ -242,18 +242,18 @@
     {#if hasSpeed}
       <label><span class="label">Speed <em>{speed}</em></span><input type="range" min="1" max="100" bind:value={speed} oninput={push} /></label>
     {/if}
-    {#if effect === "breathing" || effect === "cycle"}
+    {#if chosen === "breathing" || chosen === "cycle"}
       <label><span class="label">Intensity <em>{intensity}%</em></span><input type="range" min="1" max="100" bind:value={intensity} oninput={push} /></label>
     {/if}
-    {#if effect === "cycle"}
+    {#if chosen === "cycle"}
       <label><span class="label">Saturation <em>{Math.round((saturation / 255) * 100)}%</em></span><input type="range" min="0" max="255" bind:value={saturation} oninput={push} /></label>
     {/if}
-    {#if effect === "pulse"}
+    {#if chosen === "pulse"}
       <label><span class="label">Ring width <em>{width}</em></span><input type="range" min="1" max="100" bind:value={width} oninput={push} /></label>
       <label><span class="label">Fade time <em>{fade}</em></span><input type="range" min="1" max="100" bind:value={fade} oninput={push} /></label>
       <label class="inline"><input type="checkbox" bind:checked={rainbow} onchange={push} /><span>Rainbow rings</span></label>
     {/if}
-    {#if effect === "sequence"}
+    {#if chosen === "sequence"}
       <span class="label">Steps</span>
       <ol class="steps">
         {#each steps as s, i}
@@ -272,14 +272,14 @@
       <label><span class="label">Sweep across the board <em>{spread}</em></span><input type="range" min="0" max="100" bind:value={spread} oninput={push} /></label>
       <p class="note">Save it under "My presets" to keep it, export it or apply it to other devices.</p>
     {/if}
-    {#if effect === "screen"}
+    {#if chosen === "screen"}
       <label><span class="label">Color boost <em>{boost}</em></span><input type="range" min="0" max="100" bind:value={boost} oninput={push} /></label>
       <p class="note">
         The first time, your desktop asks which screen to share; GlowDen remembers the answer.
         Each key shows the part of the screen at its place on the board.
       </p>
     {/if}
-    {#if effect === "starlight"}
+    {#if chosen === "starlight"}
       <label><span class="label">Density <em>{density}</em></span><input type="range" min="1" max="100" bind:value={density} oninput={push} /></label>
     {/if}
     {#if layered || firmware}
@@ -323,7 +323,7 @@
     {#if presetMessage}<span class="note">{presetMessage}</span>{/if}
   </section>
 
-  {#if tab === "presets" && !effect.startsWith("fw:")}
+  {#if tab === "presets" && !chosen.startsWith("fw:")}
     <div class="sync">
       <button onclick={sync} disabled={!power}>Sync lighting to all devices</button>
       {#if syncMessage}<span class="note">{syncMessage}</span>{/if}

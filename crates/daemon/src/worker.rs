@@ -21,6 +21,7 @@ use crate::view::{self, DeviceView};
 
 pub type Reply = Sender<Result<Value, String>>;
 
+#[allow(clippy::large_enum_variant)] // a channel message; boxing buys nothing
 pub enum Cmd {
     Apply(DeviceConfig),
     GetGain(Reply),

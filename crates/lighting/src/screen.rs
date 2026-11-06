@@ -60,7 +60,7 @@ impl ScreenSampler {
             let mut frame = vec![0u8; COLS * ROWS * 3];
             while stdout.read_exact(&mut frame).is_ok() {
                 let mut g = out.lock().unwrap();
-                for (cell, px) in g.iter_mut().zip(frame.chunks_exact(3)) {
+                for (cell, px) in g.iter_mut().zip(frame.as_chunks::<3>().0) {
                     *cell = [px[0], px[1], px[2]];
                 }
             }
