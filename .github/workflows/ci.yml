@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # Same base and dependencies as the .deb release build.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
+            libpipewire-0.3-dev libsystemd-dev libdbus-1-dev libssl-dev pkg-config
+          mkdir -p "$HOME/node"
+          curl -sSfL https://nodejs.org/dist/v22.20.0/node-v22.20.0-linux-x64.tar.xz \
+            | tar -xJ --strip-components=1 -C "$HOME/node"
+          echo "$HOME/node/bin" >> "$GITHUB_PATH"
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Frontend
+        working-directory: app
+        run: |
+          npm install -g pnpm@12
+          pnpm install --frozen-lockfile
+          pnpm check
+          pnpm build
+      # The app crate embeds app/dist, so the frontend is built first.
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Tests
+        run: cargo test --workspace --locked
