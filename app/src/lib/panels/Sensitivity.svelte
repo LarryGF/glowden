@@ -13,9 +13,15 @@
   let step = $state(50);
   let interval = $state<number | null>(null);
   let intervals = $state<number[]>([]);
+  // Nothing is shown or saved until the mouse's settings are read: otherwise the
+  // placeholder levels above could overwrite the saved ones.
   let loaded = $state(false);
+  let failed = $state(false);
 
-  onMount(async () => {
+  onMount(load);
+
+  async function load() {
+    failed = false;
     try {
       const [info, cfg] = await Promise.all([api.mouseInfo(device.id), api.getConfig(device.id)]);
       // A range is encoded as low, 0xe000 | step, high.
@@ -39,11 +45,12 @@
         if (i >= 0) active = i;
         else levels[active] = info.dpi;
       }
+      loaded = true;
     } catch (e) {
+      failed = true;
       onerror(e);
     }
-    loaded = true;
-  });
+  }
 
   const pushDpi = debounce(() => loaded && api.setDpi(device.id, levels, active, defaultLevel, shift).catch(onerror));
 
@@ -76,6 +83,11 @@
   }
 </script>
 
+{#if !loaded}
+  <p class="note">
+    {#if failed}The mouse didn't answer (it may be asleep: move it). <button onclick={load}>Try again</button>{:else}Reading the mouse…{/if}
+  </p>
+{:else}
 <div class="panel">
 
   <div class="row">
@@ -125,6 +137,7 @@
     switches, as in G HUB. DPI shift applies while a DPI shift button is held.
   </p>
 </div>
+{/if}
 
 <style>
   .panel { display: flex; flex-direction: column; gap: 24px; max-width: 580px; }
