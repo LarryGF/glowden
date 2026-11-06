@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Device } from "./api";
+  import { openLink, type Device } from "./api";
   import LightingViewer from "./LightingViewer.svelte";
   import BatteryBadge from "./BatteryBadge.svelte";
   import Info from "./panels/Info.svelte";
@@ -10,6 +10,11 @@
   import Assignments from "./panels/Assignments.svelte";
 
   let { device, onerror }: { device: Device; onerror: (e: unknown) => void } = $props();
+
+  function requestSupport() {
+    const q = new URLSearchParams({ template: "device.yml", title: device.name, device: `${device.name} (${device.product})` });
+    openLink(`https://github.com/LarryGF/glowden-devices/issues/new?${q}`).catch(onerror);
+  }
 
   type Section = { key: string; label: string; planned?: string };
 
@@ -91,6 +96,12 @@
         <BatteryBadge battery={device.battery} detailed />
       {/if}
     </div>
+    {#if !device.defined}
+      <div class="undefined">
+        <p>GlowDen has no definition for this device yet. Its standard features work; its picture, extra buttons and built-in effects need one.</p>
+        <button onclick={requestSupport}>Ask for support</button>
+      </div>
+    {/if}
     <div class="visual">
       {#key device.id}
         <LightingViewer {device} />
@@ -108,7 +119,10 @@
   .dot { position: absolute; top: 7px; right: 7px; width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
   .settings { margin: 14px 0 14px; padding: 24px 24px 40px; background: var(--bg-card); border-radius: 14px; overflow: auto; }
   .settings h2 { margin: 0 0 20px; font-size: 20px; letter-spacing: 0.03em; text-transform: uppercase; }
-  .stage { display: grid; grid-template-rows: auto 1fr; min-width: 0; }
+  .stage { display: flex; flex-direction: column; min-width: 0; }
+  .visual { flex: 1; }
+  .undefined { display: flex; align-items: center; gap: 16px; margin: 14px 34px 0; padding: 12px 16px; border: 1px solid var(--line); border-radius: 10px; color: var(--text-dim); font-size: 13px; }
+  .undefined p { margin: 0; flex: 1; }
   .status { display: flex; justify-content: flex-end; gap: 14px; padding: 22px 34px 0; color: var(--text-dim); font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; }
   .visual { min-height: 0; padding: 10px 40px 40px; color: var(--text-dim); }
 </style>

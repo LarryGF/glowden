@@ -49,6 +49,8 @@ pub struct DeviceView {
     /// Switched off behind a dongle that's still plugged in (a G522 headset).
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub off: bool,
+    /// A device definition was found; without one only standard HID++ features work.
+    pub defined: bool,
 }
 
 impl DeviceView {
@@ -86,6 +88,7 @@ impl DeviceView {
             picture_clip: None,
             photo: None,
             off: true,
+            defined: true,
         }
     }
 }
@@ -206,6 +209,7 @@ pub fn build(f: &mut Found, driver: Option<&crate::drivers::Driver>) -> DeviceVi
         picture_clip: driver.and_then(|d| d.layout.picture_clip.clone()),
         photo: driver.and_then(|d| d.layout.photo.clone()),
         off: false,
+        defined: driver.is_some(),
     }
 }
 

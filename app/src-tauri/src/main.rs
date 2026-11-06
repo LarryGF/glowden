@@ -63,6 +63,20 @@ fn send(req: &Value) -> Result<Value, String> {
     }
 }
 
+/// Opens a GlowDen project page (issue forms) in the browser; nothing else.
+#[tauri::command]
+fn open_link(url: String) -> Result<(), String> {
+    if !url.starts_with("https://github.com/LarryGF/") {
+        return Err("not a GlowDen link".into());
+    }
+    let mut child = std::process::Command::new("xdg-open")
+        .arg(&url)
+        .spawn()
+        .map_err(|e| format!("cannot open the browser: {e}"))?;
+    std::thread::spawn(move || child.wait());
+    Ok(())
+}
+
 #[tauri::command]
 async fn request(req: Value) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || send(&req))
@@ -139,7 +153,7 @@ fn show_window(app: &tauri::AppHandle) {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![request])
+        .invoke_handler(tauri::generate_handler![request, open_link])
         .setup(|app| {
             let handle = app.handle().clone();
             let built = tauri::tray::TrayIconBuilder::with_id("glowden")

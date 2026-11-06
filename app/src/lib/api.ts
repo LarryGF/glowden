@@ -122,6 +122,8 @@ export interface Device {
   firmware_effects: { id: string; label: string }[];
   /** Switched off behind a dongle that's still plugged in. */
   off?: boolean;
+  /** A device definition was found; without one only standard features work. */
+  defined: boolean;
 }
 
 /** Mirrors glowdend's config: speeds, sizes and levels are 1..100 sliders. `glow` scales the
@@ -186,6 +188,8 @@ export interface LightState {
 }
 
 const request = <T>(req: Record<string, unknown>) => invoke<T>("request", { req });
+
+export const openLink = (url: string) => invoke<void>("open_link", { url });
 
 export const api = {
   listDevices: () => request<Device[]>({ cmd: "list" }),
