@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/LarryGF/glowden/compare/v0.2.2...v0.3.0) (2026-11-06)
+
+
+### Features
+
+* **app:** say when a device has no definition, with a link to ask for support ([09149df](https://github.com/LarryGF/glowden/commit/09149df442d66a21aa94edd7370adcfd14f0e225))
+
+
+### Bug Fixes
+
+* **packaging:** Arch package depends on libayatana-appindicator ([b74b770](https://github.com/LarryGF/glowden/commit/b74b77053c955bdb5b47f5ec59d62b47928a81b6))
+
 ## [0.2.2](https://github.com/LarryGF/glowden/compare/v0.2.1...v0.2.2) (2026-11-05)
 
 
