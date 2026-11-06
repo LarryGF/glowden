@@ -143,6 +143,10 @@ pub struct DeviceConfig {
     /// Button number (as the mouse's button spy counts them, from 1) → what it does.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub assignments: BTreeMap<u8, Action>,
+    /// Keyboard key (Linux name, `KEY_CAPSLOCK`) → what it does instead. The keyboard is
+    /// grabbed on the host only while this has entries.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub key_remaps: BTreeMap<String, Action>,
 }
 
 /// What an assigned button does. Keys use Linux names (`KEY_LEFTCTRL`, `BTN_SIDE`, see
@@ -337,6 +341,9 @@ impl Config {
         }
         if !over.assignments.is_empty() {
             cfg.assignments = over.assignments.clone();
+        }
+        if !over.key_remaps.is_empty() {
+            cfg.key_remaps = over.key_remaps.clone();
         }
         cfg
     }

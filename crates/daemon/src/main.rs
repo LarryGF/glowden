@@ -1,6 +1,7 @@
 //! glowdend: owns the devices, keeps their configuration applied, and serves the UI over a
 //! Unix socket with one JSON request/response per line.
 
+mod actions;
 mod app;
 mod assets;
 mod battery;
@@ -8,6 +9,7 @@ mod config;
 mod drivers;
 mod focus;
 mod keys;
+mod remap;
 mod sources;
 mod uinput;
 mod view;
@@ -664,6 +666,12 @@ enum Request {
         button: u8,
         action: Option<Action>,
     },
+    /// Keyboards: `key` is a Linux key name; no action removes the remap.
+    SetKeyRemap {
+        id: String,
+        key: String,
+        action: Option<Action>,
+    },
     AppSettings,
     SetAppSettings {
         settings: AppSettings,
@@ -1008,6 +1016,19 @@ fn handle(req: Request, shared: &Shared) -> Result<Value, String> {
                 c.assignments.remove(&button);
             }
         }),
+        Request::SetKeyRemap { id, key, action } => {
+            if keys::code(&key).is_none() {
+                return Err(format!("unknown key {key}"));
+            }
+            update(shared, &id, |c| match action {
+                Some(a) => {
+                    c.key_remaps.insert(key, a);
+                }
+                None => {
+                    c.key_remaps.remove(&key);
+                }
+            })
+        }
         Request::AppSettings => Ok(app_settings(&lock.lock().unwrap())),
         Request::SetAppSettings { settings } => {
             let mut st = lock.lock().unwrap();

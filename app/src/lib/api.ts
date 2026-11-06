@@ -151,6 +151,7 @@ export interface DeviceConfig {
   dpi_default?: number;
   dpi_shift?: number;
   report_interval?: number;
+  key_remaps?: Record<string, Action>;
 }
 
 export interface MouseInfo {
@@ -231,6 +232,8 @@ export const api = {
   buttons: (id: string) => request<ButtonsInfo>({ cmd: "buttons", id }),
   setAssignment: (id: string, button: number, action: Action | null) =>
     request<void>({ cmd: "set_assignment", id, button, action }),
+  setKeyRemap: (id: string, key: string, action: Action | null) =>
+    request<void>({ cmd: "set_key_remap", id, key, action }),
   setAppSettings: (settings: AppInfo["settings"]) => request<AppInfo>({ cmd: "set_app_settings", settings }),
   setAutostart: (on: boolean) => request<boolean>({ cmd: "set_autostart", on }),
   sources: () => request<Source[]>({ cmd: "sources" }),
