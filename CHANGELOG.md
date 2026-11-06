@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/LarryGF/glowden/compare/v0.3.0...v0.4.0) (2026-11-06)
+
+
+### Features
+
+* per-app profiles on GNOME and Hyprland ([de7b2e7](https://github.com/LarryGF/glowden/commit/de7b2e7e89414fbd726f8c479d03a628d373df5b))
+
+
+### Bug Fixes
+
+* **app:** sensitivity panel waits for the mouse's settings ([fcc9413](https://github.com/LarryGF/glowden/commit/fcc9413c9451632d36fa46fd486e44a0bc50c6e2))
+
 ## [0.3.0](https://github.com/LarryGF/glowden/compare/v0.2.2...v0.3.0) (2026-11-06)
 
 
